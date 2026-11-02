@@ -133,7 +133,7 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 're
 // ===== 상태 =====
 const S = {
   session: null, isAdmin: false, me: null, members: [],
-  base: todayStr(), summary: [], ownerFilter: 'all', q: '',
+  base: todayStr(), summary: [], ownerFilter: null, q: '',   // null = 로그인 직후 기본값(관리자는 본인 거래처부터)
   view: 'loading', custId: null, entryCustName: '', setPw: AUTH_TYPE === 'invite' || AUTH_TYPE === 'recovery'
 };
 
@@ -254,7 +254,9 @@ function viewDash(){
     (!S.q || c.customer_name.includes(S.q)));
   const sum = (f)=> list.reduce((a,c)=>a+Number(f(c)||0),0);
   const cnt = (k)=> list.filter(c=>c._s.k===k).length;
-  const owners = [...new Map(S.summary.map(c=>[c.owner_id, c.owner_name||'(이름 없음)'])).entries()];
+  const ownerMap = new Map([[S.session.user.id, (S.me?.display_name||'나')+' (나)']]); // 내 이름을 항상 맨 위에
+  S.summary.forEach(c=>{ if(!ownerMap.has(c.owner_id)) ownerMap.set(c.owner_id, c.owner_name||'(이름 없음)'); });
+  const owners = [...ownerMap.entries()];
   app.innerHTML = header('회전일 차트') + `<div class="wrap">
     <div class="tools">
       <label class="muted" style="align-self:center">기준일</label>
@@ -585,13 +587,14 @@ async function start(){
   try{
     await loadMe();
     if(!S.me){ viewName(); return; }
+    if(S.ownerFilter==null) S.ownerFilter = S.isAdmin ? S.session.user.id : 'all';
     await loadSummary(); S.view='dash'; viewDash();
   }catch(e){ app.innerHTML = header('회전일 차트') + `<div class="wrap"><div class="card err">${esc(errMsg(e))}</div></div>`; }
 }
 sb.auth.onAuthStateChange((ev, session)=>{
   if(ev==='PASSWORD_RECOVERY') S.setPw = true;
   if(ev==='SIGNED_IN' && (!S.session || S.session.user.id!==session.user.id)){ S.session=session; start(); }
-  if(ev==='SIGNED_OUT'){ S.session=null; S.me=null; S.isAdmin=false; S.summary=[]; S.view='login'; viewLogin(); }
+  if(ev==='SIGNED_OUT'){ S.session=null; S.me=null; S.isAdmin=false; S.summary=[]; S.ownerFilter=null; S.view='login'; viewLogin(); }
 });
 start();
 </script>
