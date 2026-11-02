@@ -40,7 +40,9 @@ header.top .who{font-size:13px;opacity:.9;white-space:nowrap}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .grow{flex:1;min-width:0}
 label.f{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
-input.i,select.i,textarea.i{width:100%;max-width:100%;min-width:0;padding:11px 12px;border:1px solid #cdd6e1;border-radius:10px;background:#fff}
+/* 아이폰 사파리: 입력칸 글자가 16px보다 작으면 누를 때 화면을 자동 확대함 → 16px로 고정 */
+input,select,textarea{font-size:16px}
+input.i,select.i,textarea.i{font-size:16px;width:100%;max-width:100%;min-width:0;padding:11px 12px;border:1px solid #cdd6e1;border-radius:10px;background:#fff}
 /* 일자·금액 두 칸: 넓은 화면은 나란히, 휴대폰은 위아래 (아이폰 날짜 칸 겹침 방지) */
 .pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
 .pair>div{min-width:0}
@@ -48,7 +50,7 @@ input.i,select.i,textarea.i{width:100%;max-width:100%;min-width:0;padding:11px 1
 /* 아이폰 Safari: 날짜 칸이 옆 칸을 덮지 않게 */
 input.i[type=date]{-webkit-appearance:none;appearance:none;display:block;min-height:46px;text-align:left}
 input.i[type=date]::-webkit-date-and-time-value{text-align:left}
-textarea.i{min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
+textarea.i{min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:16px}
 .muted{color:var(--sub);font-size:13px}
 .err{color:var(--red);font-size:14px;margin-top:8px;white-space:pre-wrap}
 .ok{color:var(--grn);font-size:14px;margin-top:8px}
