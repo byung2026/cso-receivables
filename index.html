@@ -194,7 +194,7 @@ async function loadSummary(){
 function header(title, back){
   const name = S.me ? esc(S.me.display_name) : '';
   return `<header class="top"><div class="in">
-    ${back?`<button class="back" onclick="go('dash')" aria-label="뒤로">‹</button>`:''}
+    ${back?`<button class="back" onclick="goBack()" aria-label="뒤로">‹</button>`:''}
     <h1>${esc(title)}</h1>
     <span class="who">${name} ${S.isAdmin?'<span class="badge b-admin">관리자</span>':''}</span>
     ${back?'':`<button class="btn ghost" onclick="logout()">로그아웃</button>`}
@@ -327,7 +327,7 @@ function bucketOf(c){
 function pickBucket(k){ S.bucket = (k && S.bucket!==k) ? k : null; viewDash(); }
 
 // ===== 거래처 상세 =====
-async function openCust(id){ S.custId=id; S.view='detail'; await viewDetail(); }
+async function openCust(id, replace){ pushNav({v:'detail', id}, replace); S.custId=id; S.view='detail'; await viewDetail(); }
 function runCheck(entries){
   let rb=0; return entries.map(e=>{
     const counted = e.status==='확정';
@@ -419,7 +419,7 @@ async function delCustomer(){ const c=S.summary.find(x=>x.customer_id===S.custId
 // ===== 거래 입력 =====
 function custOptions(){ return S.summary.filter(c=>!S.isAdmin || c.owner_id===S.session.user.id).map(c=>`<option value="${esc(c.customer_name)}">`).join(''); }
 // keep=true: 거래처 상세에서 누른 경우만 그 거래처 이름을 미리 채움. 첫 화면에서는 항상 빈칸
-function openEntry(keep){ if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); }
+function openEntry(keep){ pushNav({v:'entry', keep:!!keep}); if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); }
 function viewEntry(msg, ok){
   app.innerHTML = header('거래 입력', true) + `<div class="wrap"><form id="ef" class="card">
     <label class="f">거래처 (처음 입력하면 자동으로 생성됩니다)</label>
@@ -474,7 +474,7 @@ async function ledgerCheck(cid, lbv){
 }
 
 // ===== 붙여넣기 (엑셀·거래장 여러 줄) =====
-function openPaste(photo){ S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; viewPaste(); }
+function openPaste(photo){ pushNav({v:'paste', photo:!!photo}); S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; viewPaste(); }
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
 async function shrink(file){
   const url=URL.createObjectURL(file);
@@ -573,13 +573,13 @@ function viewPaste(){
       for(const row of ins){ const {error}=await sb.from('entries').insert(row); if(error) throw error; } // 한 줄씩 넣어 순서 보존
       if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
       S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
-      const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid); } else go('dash');
+      const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash'); // 붙여넣기 화면 기록을 거래처 상세로 바꿈
     }catch(er){ pr.insertAdjacentHTML('beforeend', `<div class="err">${esc(errMsg(er))}</div>`); ps.disabled=false; }
   };
 }
 
 // ===== 동료 관리 (관리자) =====
-async function openTeam(){ S.view='team'; await viewTeam(); }
+async function openTeam(){ pushNav({v:'team'}); S.view='team'; await viewTeam(); }
 async function viewTeam(msg, ok){
   if(!S.isAdmin){ go('dash'); return; }
   const {data} = await sb.from('members').select('*').order('created_at'); S.members = data||[];
@@ -640,7 +640,7 @@ async function docAction(k, act){
 }
 function openDocs(){
   if(!S.isAdmin){ go('dash'); return; }
-  S.view='docs';
+  pushNav({v:'docs'}); S.view='docs';
   app.innerHTML = header('설명서', true) + `<div class="wrap">
     ${Object.entries(DOCS).map(([k,d])=>`<div class="card"><h3>📘 ${esc(d.title)}</h3><div class="muted">${esc(d.desc)}</div>
       <div class="row" style="margin-top:12px">
@@ -658,7 +658,35 @@ async function refresh(rerender=true){
   if(!rerender) return;
   if(S.view==='detail') await viewDetail(); else if(S.view==='dash') viewDash();
 }
-function go(v){ S.view=v; if(v==='dash'){ refresh(true); } }
+// ===== 뒤로 가기 (아이폰 밀어서 뒤로·안드로이드 뒤로 버튼) =====
+// 화면을 옮길 때마다 브라우저 기록을 남겨서, 뒤로 가기가 이전 화면으로 돌아오게 함
+let NAV_POP = false;
+function pushNav(st, replace){ if(NAV_POP) return; try{ history[replace?'replaceState':'pushState'](st, ''); }catch(_){} }
+function goBack(){ if(history.state && history.state.v && history.state.v!=='dash') history.back(); else { S.view='dash'; refresh(true); } }
+window.addEventListener('popstate', async e=>{
+  if(!S.session || !S.me) return;
+  const st = e.state || {v:'dash'}; NAV_POP = true;
+  try{
+    if(st.v==='detail') await openCust(st.id);
+    else if(st.v==='entry') openEntry(st.keep);
+    else if(st.v==='paste') openPaste(st.photo);
+    else if(st.v==='team') await openTeam();
+    else if(st.v==='docs') openDocs();
+    else { S.view='dash'; await refresh(true); }
+  } finally { NAV_POP = false; }
+});
+// 홈 화면에 추가한 아이폰 앱에는 밀어서 뒤로 가기가 없어서 직접 처리 (화면 왼쪽 끝에서 오른쪽으로 밀기)
+if(window.navigator.standalone){
+  let sx=null, sy=0;
+  document.addEventListener('touchstart', e=>{ const t=e.touches[0]; sx = t.clientX<28 ? t.clientX : null; sy=t.clientY; }, {passive:true});
+  document.addEventListener('touchend', e=>{ if(sx==null) return; const t=e.changedTouches[0];
+    if(t.clientX-sx>70 && Math.abs(t.clientY-sy)<60 && S.view!=='dash') goBack(); sx=null; }, {passive:true});
+}
+function go(v){
+  // 코드에서 첫 화면으로 돌아갈 때는 기록도 한 칸 뒤로 (뒤로 가기가 꼬이지 않게)
+  if(v==='dash' && !NAV_POP && history.state && history.state.v && history.state.v!=='dash'){ history.back(); return; }
+  S.view=v; if(v==='dash'){ refresh(true); }
+}
 async function logout(){ await sb.auth.signOut(); }
 async function start(){
   const {data:{session}} = await sb.auth.getSession(); S.session=session;
@@ -669,7 +697,7 @@ async function start(){
     await loadMe();
     if(!S.me){ viewName(); return; }
     if(S.ownerFilter==null) S.ownerFilter = S.isAdmin ? S.session.user.id : 'all';
-    await loadSummary(); S.view='dash'; viewDash();
+    await loadSummary(); S.view='dash'; pushNav({v:'dash'}, true); viewDash();
   }catch(e){ app.innerHTML = header('회전일 차트') + `<div class="wrap"><div class="card err">${esc(errMsg(e))}</div></div>`; }
 }
 sb.auth.onAuthStateChange((ev, session)=>{
