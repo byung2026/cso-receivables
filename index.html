@@ -266,7 +266,7 @@ function viewDash(){
     (!S.q || c.customer_name.includes(S.q)));
   // 회전일 칸: 거래처마다 '회전일(가장 오래된 채권)' 기준으로 한 칸에만 들어감 (중복 없음)
   //  예) 회전일 110일 거래처는 120일 칸에만, 잔액 전체가 그 칸 금액에 합산
-  const list = S.bucket ? base_.filter(c=>bucketOf(c)===S.bucket) : base_;
+  const list = sortList(S.bucket ? base_.filter(c=>bucketOf(c)===S.bucket) : base_);
   const sum = (f)=> base_.reduce((a,c)=>a+Number(f(c)||0),0);
   const cnt = (k)=> base_.filter(c=>c._s.k===k).length;
   const bkTile = (k,lbl,hot)=>{ const inB=base_.filter(c=>bucketOf(c)===k); const amt=inB.reduce((a,c)=>a+Number(c.balance||0),0); const n=inB.length;
@@ -282,6 +282,9 @@ function viewDash(){
       <input class="i" type="date" id="base" value="${S.base}" style="max-width:170px">
       ${S.isAdmin?`<select class="i" id="own"><option value="all">전체 담당자</option>${owners.map(([id,n])=>`<option value="${id}" ${S.ownerFilter===id?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}
       <input class="i" id="q" placeholder="거래처 검색" value="${esc(S.q)}">
+      <select class="i" id="srt" style="flex:0 1 170px" aria-label="정렬">
+        ${[['name','이름순'],['turnDesc','회전일 긴 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<option value="${v}" ${(S.sort||'name')===v?'selected':''}>${t}</option>`).join('')}
+      </select>
       ${S.isAdmin?`<button class="btn sec" style="flex:0 0 auto" onclick="openTeam()">👥 동료 관리</button><button class="btn sec" style="flex:0 0 auto" onclick="openDocs()">📘 설명서</button>`:''}
     </div>
     <div class="stats">
@@ -314,8 +317,19 @@ function viewDash(){
   base.onchange = async ()=>{ S.base = base.value || todayStr(); await refresh(); };
   q.oninput = ()=>{ S.q=q.value.trim(); const p=q.selectionStart; viewDash(); const nq=document.getElementById('q'); nq.focus(); nq.setSelectionRange(p,p); };
   if(S.isAdmin) own.onchange = ()=>{ S.ownerFilter=own.value; viewDash(); };
+  srt.onchange = ()=>{ S.sort = srt.value; viewDash(); };
 }
 
+// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
+function sortList(arr){
+  const byName = (a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko');
+  const t = c => Number(c.balance)>0 && c.turnover_days!=null ? Number(c.turnover_days) : null;
+  const mode = S.sort || 'name';
+  if(mode==='name') return [...arr].sort(byName);
+  return [...arr].sort((a,b)=>{ const x=t(a), y=t(b);
+    if(x==null && y==null) return byName(a,b); if(x==null) return 1; if(y==null) return -1;
+    return (mode==='turnDesc' ? y-x : x-y) || byName(a,b); });
+}
 // 거래처 하나를 회전일 기준 한 칸에 배정 (회사 열 구간과 같은 경계, 181일 이상 = 차단)
 function bucketOf(c){
   if(!Number(c.balance)) return null;
