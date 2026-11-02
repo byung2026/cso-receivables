@@ -226,7 +226,7 @@ function viewSetPassword(){
   };
 }
 function viewName(){
-  app.innerHTML = `<div class="login"><h2>이름 등록</h2><div class="muted">현황판에 표시될 이름입니다. (예: 홍길동)</div>
+  app.innerHTML = `<div class="login"><h2>이름 등록</h2><div class="muted">회전일 차트에 표시될 이름입니다. (예: 홍길동)</div>
     <form id="nf" class="card"><label class="f">이름</label><input class="i" id="nm" required maxlength="20">
     <div style="margin-top:14px"><button class="btn" style="width:100%">시작하기</button></div><div id="nmm" class="err"></div></form></div>`;
   document.getElementById('nf').onsubmit = async e=>{
