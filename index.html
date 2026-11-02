@@ -307,10 +307,12 @@ async function viewDetail(){
   const c = S.summary.find(x=>x.customer_id===S.custId);
   if(!c){ go('dash'); return; }
   app.innerHTML = header(c.customer_name, true) + `<div class="wrap"><div class="empty">불러오는 중...</div></div>`;
-  const [en, fi] = await Promise.all([
+  const [en, fi, ph] = await Promise.all([
     sb.from('entries').select('*').eq('customer_id', c.customer_id),
-    sb.rpc('fifo_items', {p_base:S.base})
+    sb.rpc('fifo_items', {p_base:S.base}),
+    sb.from('photos').select('id,created_at,purged_at,storage_path').eq('customer_id', c.customer_id).order('created_at',{ascending:false})
   ]);
+  const photos = ph.data||[]; S.photoMap = Object.fromEntries(photos.map(p=>[p.id,p]));
   const err = en.error||fi.error; if(err){ app.innerHTML = header(c.customer_name,true)+`<div class="wrap"><div class="err">${esc(errMsg(err))}</div></div>`; return; }
   const entries = runCheck((en.data||[]).sort(sortEntries));
   const items = (fi.data||[]).filter(x=>x.customer_id===c.customer_id && Number(x.remaining)>0).sort((a,b)=>(a.entry_date||'')<(b.entry_date||'')?-1:1);
@@ -337,11 +339,17 @@ async function viewDetail(){
         <td>${i.entry_date? md(addDays(i.entry_date, blockDays()-1)):'-'}</td></tr>`).join('')}</table></div>`
       :'<div class="muted">남은 채권이 없습니다.</div>'}
     </div>
+    ${photos.length?`<div class="card"><h3>거래장 사진 <span class="muted" style="font-weight:400">(올린 날부터 3개월 보관 후 자동 삭제)</span></h3>
+      ${photos.map(p=>{ const up=p.created_at.slice(0,10); const del=addMonths(up,3);
+        return `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--line)">
+          <span class="grow">📷 ${md(up)} 올림 <span class="muted">· ${p.purged_at?'삭제됨':`${md(del)} 삭제 예정`}</span></span>
+          ${p.purged_at?'<span class="muted">보관 기간 지남</span>':`<button class="btn sm sec" onclick="viewPhoto('${p.id}')">보기</button>`}</div>`;}).join('')}
+    </div>`:''}
     <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><button class="btn sm" onclick="openEntry()">+ 거래 입력</button></div>
       <div style="margin-top:8px">
       ${[...entries].reverse().map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; /* 잔액은 오래된 순으로 계산, 표시는 최근 순 */ const amt=isPay?e.pay_amount:e.sale_amount;
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
-        <div class="l1"><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span><span class="kd">${e.kind}</span>
+        <div class="l1"><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span><span class="kd">${e.kind}</span>${e.photo_id&&S.photoMap[e.photo_id]&&!S.photoMap[e.photo_id].purged_at?`<span title="사진으로 입력" style="cursor:pointer" onclick="viewPhoto('${e.photo_id}')">📷</span>`:''}
           <span class="it">${esc(e.item||'')}</span><span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span></div>
         <div class="l2"><span>계산 ${e._rb!=null?won(e._rb):'-'}</span>${e.ledger_balance!=null?`<span>거래장 ${won(e.ledger_balance)} ${e._mis?'<b style="color:var(--red)">불일치 ⚠</b>':'✓'}</span>`:''}
           <span class="sp"></span>
@@ -357,6 +365,14 @@ async function viewDetail(){
     if(error) toast(errMsg(error)); else { toast('담당자를 변경했습니다.'); await refresh(true); }
   }; }
   S.entryCustName = c.customer_name;
+}
+function addMonths(s,n){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+async function viewPhoto(id){
+  const p=(S.photoMap||{})[id]; if(!p) return;
+  const w=window.open('', '_blank'); // 팝업 차단 방지: 클릭 순간 창을 먼저 연다
+  const {data, error}=await sb.storage.from('ledger-photos').createSignedUrl(p.storage_path, 300);
+  if(error||!data){ if(w) w.close(); toast('사진을 열 수 없습니다. (보관 기간이 지났거나 권한 없음)'); return; }
+  if(w) w.location.href=data.signedUrl; else location.href=data.signedUrl;
 }
 async function confirmEntry(id){ const {error}=await sb.from('entries').update({status:'확정'}).eq('id',id); if(error) toast(errMsg(error)); else await refresh(true); }
 async function delEntry(id){ if(!confirm('이 거래를 삭제할까요?')) return; const {error}=await sb.from('entries').delete().eq('id',id); if(error) toast(errMsg(error)); else { toast('삭제했습니다.'); await refresh(true); } }
