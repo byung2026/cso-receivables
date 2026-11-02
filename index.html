@@ -38,6 +38,10 @@ header.top .who{font-size:13px;opacity:.9;white-space:nowrap}
 .grow{flex:1;min-width:0}
 label.f{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
 input.i,select.i,textarea.i{width:100%;max-width:100%;min-width:0;padding:11px 12px;border:1px solid #cdd6e1;border-radius:10px;background:#fff}
+/* 일자·금액 두 칸: 넓은 화면은 나란히, 휴대폰은 위아래 (아이폰 날짜 칸 겹침 방지) */
+.pair{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px}
+.pair>div{min-width:0}
+@media (max-width:560px){.pair{grid-template-columns:minmax(0,1fr);gap:0}}
 /* 아이폰 Safari: 날짜 칸이 옆 칸을 덮지 않게 */
 input.i[type=date]{-webkit-appearance:none;appearance:none;display:block;min-height:46px;text-align:left}
 input.i[type=date]::-webkit-date-and-time-value{text-align:left}
@@ -317,8 +321,9 @@ async function viewDetail(){
       <div class="kv" style="margin-top:10px">
         <div>기준일</div><div>${S.base}</div>
         <div>미수 잔액</div><div><b>${won(c.balance)}원</b>${Number(c.prepayment)>0?` · 선수금 ${won(c.prepayment)}원`:''}</div>
-        <div>회전일</div><div><b>${c.turnover_days??'-'}${c.turnover_days!=null?'일':''}</b> ${c.oldest_date?`(가장 오래된 잔여 채권 ${c.oldest_date})`:''}</div>
-        ${c.last_order_date?`<div>마지막 주문 가능일</div><div><b>${c.last_order_date}</b> · 차단 시작 ${c.block_start_date}</div>`:''}
+        <div>회전일</div><div><b>${c.turnover_days??'-'}${c.turnover_days!=null?'일':''}</b>${c.oldest_date?`<div class="muted" style="white-space:nowrap">(가장 오래된 채권 ${c.oldest_date})</div>`:''}</div>
+        ${c.last_order_date?`<div>마지막 주문 가능일</div><div><b>${c.last_order_date}</b></div>
+        <div>차단 시작</div><div>${c.block_start_date}</div>`:''}
         ${S.isAdmin?`<div>담당자</div><div><select class="i" id="ownSel" style="padding:6px 8px;max-width:220px">${S.members.map(m=>`<option value="${m.user_id}" ${m.user_id===c.owner_id?'selected':''}>${esc(m.display_name)}</option>`).join('')}</select></div>`:''}
       </div>
     </div>
@@ -371,8 +376,8 @@ function viewEntry(msg, ok){
     <input class="i" id="cn" list="cl" value="${esc(S.entryCustName)}" required placeholder="병원이름"><datalist id="cl">${custOptions()}</datalist>
     <label class="f">구분</label>
     <div class="seg" id="kd">${['판매','수금','이월','반품'].map((k,i)=>`<button type="button" data-k="${k}" class="${i===0?'on':''}">${k}</button>`).join('')}</div>
-    <div class="row"><div class="grow"><label class="f">일자 <span id="dh" class="muted"></span></label><input class="i" id="dt" type="date" value="${todayStr()}"></div>
-      <div class="grow"><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="0"></div></div>
+    <div class="pair"><div><label class="f">일자 <span id="dh" class="muted"></span></label><input class="i" id="dt" type="date" value="${todayStr()}"></div>
+      <div><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="0"></div></div>
     <label class="f">품목 / 적요 (선택)</label><input class="i" id="it" placeholder="예: 하이알포르테주">
     <label class="f">거래장 잔액 (선택 · 넣으면 자동 대조)</label><input class="i" id="lb" inputmode="numeric" placeholder="거래 후 잔액">
     <div style="margin-top:14px" class="row"><button class="btn grow">저장</button></div>
