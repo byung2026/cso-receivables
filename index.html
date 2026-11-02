@@ -374,7 +374,7 @@ async function viewDetail(){
           <span class="grow">📷 ${md(up)} 올림 <span class="muted">· ${p.purged_at?'삭제됨':`${md(del)} 삭제 예정`}</span></span>
           ${p.purged_at?'<span class="muted">보관 기간 지남</span>':`<button class="btn sm sec" onclick="viewPhoto('${p.id}')">보기</button>`}</div>`;}).join('')}
     </div>`:''}
-    <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><button class="btn sm" onclick="openEntry()">+ 거래 입력</button></div>
+    <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><button class="btn sm" onclick="openEntry(true)">+ 거래 입력</button></div>
       <div style="margin-top:8px">
       ${[...entries].reverse().map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; /* 잔액은 오래된 순으로 계산, 표시는 최근 순 */ const amt=isPay?e.pay_amount:e.sale_amount;
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
@@ -411,7 +411,8 @@ async function delCustomer(){ const c=S.summary.find(x=>x.customer_id===S.custId
 
 // ===== 거래 입력 =====
 function custOptions(){ return S.summary.filter(c=>!S.isAdmin || c.owner_id===S.session.user.id).map(c=>`<option value="${esc(c.customer_name)}">`).join(''); }
-function openEntry(){ S.view='entry'; viewEntry(); }
+// keep=true: 거래처 상세에서 누른 경우만 그 거래처 이름을 미리 채움. 첫 화면에서는 항상 빈칸
+function openEntry(keep){ if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); }
 function viewEntry(msg, ok){
   app.innerHTML = header('거래 입력', true) + `<div class="wrap"><form id="ef" class="card">
     <label class="f">거래처 (처음 입력하면 자동으로 생성됩니다)</label>
@@ -446,10 +447,10 @@ function viewEntry(msg, ok){
         sale_amount: (kind==='수금'||kind==='반품')?0:amt, pay_amount: (kind==='수금'||kind==='반품')?amt:0,
         ledger_balance: lb.value? Number(lb.value.replace(/[^0-9-]/g,'')) : null, input_method:'직접', status:'확정'};
       const {error} = await sb.from('entries').insert(row); if(error) throw error;
-      S.entryCustName = name;
+      S.entryCustName = ''; // 저장 후 다음 입력은 거래처 칸을 비워서 시작
       const chk = await ledgerCheck(cid, row.ledger_balance);
       await refresh(false);
-      viewEntry(`저장했습니다. ${chk}`, !/불일치/.test(chk));
+      viewEntry(`${name}: 저장했습니다. ${chk}`, !/불일치/.test(chk));
     }catch(er){ out.className='err'; out.textContent=errMsg(er); }
   };
 }
@@ -466,7 +467,7 @@ async function ledgerCheck(cid, lbv){
 }
 
 // ===== 붙여넣기 (엑셀·거래장 여러 줄) =====
-function openPaste(photo){ S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; viewPaste(); }
+function openPaste(photo){ S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; viewPaste(); }
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
 async function shrink(file){
   const url=URL.createObjectURL(file);
@@ -564,7 +565,7 @@ function viewPaste(){
         input_method: S.photoMode?'사진':'엑셀', photo_id: S.photoIds[0]||null, status: r.mis?'확인대기':'확정'}));
       for(const row of ins){ const {error}=await sb.from('entries').insert(row); if(error) throw error; } // 한 줄씩 넣어 순서 보존
       if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
-      S.entryCustName=name; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
+      S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid); } else go('dash');
     }catch(er){ pr.insertAdjacentHTML('beforeend', `<div class="err">${esc(errMsg(er))}</div>`); ps.disabled=false; }
   };
