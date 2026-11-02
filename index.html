@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>회전일 차트</title>
 <meta name="theme-color" content="#1f3864">
+<meta name="color-scheme" content="only light"><!-- 삼성 브라우저 등의 강제 다크모드로 색이 바뀌지 않게 -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="회전일 차트">
@@ -17,6 +18,8 @@
   --grn:#1e8e3e; --grn-bg:#e6f4ea; --gry:#6b7785; --gry-bg:#eef1f4; --ylw-bg:#fff8db;
 }
 *{box-sizing:border-box}
+:root{color-scheme:only light}
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%} /* 브라우저 글자 크기 자동 확대로 칸이 깨지지 않게 */
 html,body{margin:0;background:var(--bg);color:var(--ink);
   font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Malgun Gothic","Noto Sans KR",sans-serif;font-size:15px;line-height:1.45}
 button,input,select,textarea{font:inherit;color:inherit}
