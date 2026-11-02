@@ -299,7 +299,7 @@ function viewDash(){
           ${S.isAdmin?`<span>담당 <b>${esc(c.owner_name||'-')}</b></span>`:''}
           <span>잔액 <b>${won(c.balance)}</b></span>          <span>회전일 <b>${c.turnover_days??(Number(c.balance)?'미상':'-')}</b>${c.turnover_days!=null?'일':''}</span>
           ${Number(c.over_block)>0?`<span>181일↑ <b style="color:var(--red)">${won(c.over_block)}</b></span>`:''}
-          ${left!=null && Number(c.over_block)===0?`<span>마지막 주문 <b>${md(c.last_order_date)}</b> (D-${left})</span>`:''}
+          ${left!=null && Number(c.over_block)===0?`<span>회전일 초과 <b>${md(c.block_start_date)}</b> (D-${dd(c.block_start_date,S.base)})</span>`:''}
           ${c.pending_count>0?`<span class="chip c-warn">확인대기 ${c.pending_count}</span>`:''}
           ${c.ledger_mismatch_count>0?`<span class="chip c-block">잔액 불일치 ${c.ledger_mismatch_count}</span>`:''}
         </div></button>`;}).join('')
