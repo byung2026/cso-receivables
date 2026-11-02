@@ -290,7 +290,7 @@ function viewDash(){
       <div class="stat org"><div class="k">🚨 곧 차단 (${SOON_DAYS}일 내)</div><div class="v">${cnt('soon')}처</div></div>
       <div class="stat red"><div class="k">🚨 181일 초과분</div><div class="v">${won(sum(c=>c.over_block))}</div></div>
     </div>
-    <div class="card"><h3>회전일 <span class="muted" style="font-weight:400">· 거래처별 회전일 기준 · 칸을 누르면 해당 거래처만 보기</span></h3><div class="buckets">
+    <div class="card"><h3>회전일 <span class="muted" style="font-weight:400">· 거래처별 회전일 기준</span></h3><div class="buckets">
       ${bkTile('d30','30일 (0~30)')}${bkTile('d60','60일 (31~60)')}${bkTile('d90','90일 (61~90)')}${bkTile('d120','120일 (91~120)')}
       ${bkTile('d150','150일 (121~150)')}${bkTile('d180','180일 (151~180)')}${bkTile('over_block','181일 이상 (차단)',true)}${bkTile('undated_remaining','날짜 미상',true)}
     </div></div>
