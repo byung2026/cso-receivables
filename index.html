@@ -106,7 +106,19 @@ const SUPABASE_KEY = 'sb_publishable_1f_ucdTBzhtwTnYxXUO1Gg_6lX7zNZf'; // 공개
 const SOON_DAYS = 30; // 마지막 주문 가능일까지 이 일수 이내면 '곧 차단'
 
 const AUTH_TYPE = (location.hash.match(/type=([a-z]+)/) || [])[1] || null; // invite / recovery
-const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'receivables' } });
+// 로그인 편의 설정 (이 기기에만 저장)
+const PREF = {
+  get(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } },
+  set(k,v){ try{ v==null? localStorage.removeItem(k) : localStorage.setItem(k,v); }catch(_){} }
+};
+const autoLogin = ()=> PREF.get('cso_auto') !== '0';   // 기본: 자동 로그인 켜짐
+// 자동 로그인 켜짐 → 로그인 유지(localStorage) / 꺼짐 → 브라우저를 닫으면 로그아웃(sessionStorage)
+const authStorage = {
+  getItem(k){ try{ return (autoLogin()?localStorage:sessionStorage).getItem(k); }catch(_){ return null; } },
+  setItem(k,v){ try{ (autoLogin()?localStorage:sessionStorage).setItem(k,v); (autoLogin()?sessionStorage:localStorage).removeItem(k); }catch(_){} },
+  removeItem(k){ try{ localStorage.removeItem(k); sessionStorage.removeItem(k); }catch(_){} }
+};
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY, { db: { schema: 'receivables' }, auth: { storage: authStorage, persistSession: true } });
 
 // ===== 상태 =====
 const S = {
@@ -173,14 +185,20 @@ function viewLogin(msg){
   app.innerHTML = `<div class="login">
     <h2>CSO 미수금 회전일</h2><div class="muted">초대받은 이메일로 로그인하세요.</div>
     <form id="lf" class="card">
-      <label class="f">이메일</label><input class="i" id="em" type="email" autocomplete="username" required>
+      <label class="f">이메일</label><input class="i" id="em" type="email" autocomplete="username" required value="${esc(PREF.get('cso_email')||'')}">
       <label class="f">비밀번호</label><input class="i" id="pw" type="password" autocomplete="current-password" required>
+      <div class="row" style="margin-top:12px;gap:18px">
+        <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="saveId" ${PREF.get('cso_email')?'checked':''} style="width:18px;height:18px">아이디 저장</label>
+        <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="autoLg" ${autoLogin()?'checked':''} style="width:18px;height:18px">자동 로그인</label>
+      </div>
       <div style="margin-top:14px"><button class="btn" style="width:100%">로그인</button></div>
       <div id="lm" class="err">${msg?esc(msg):''}</div>
       <div style="margin-top:10px;text-align:right"><a href="#" id="fp" class="muted">비밀번호를 잊으셨나요?</a></div>
     </form></div>`;
   document.getElementById('lf').onsubmit = async e=>{
     e.preventDefault(); const lm=document.getElementById('lm'); lm.textContent='로그인 중...';
+    PREF.set('cso_auto', autoLg.checked ? '1' : '0');
+    PREF.set('cso_email', saveId.checked ? em.value.trim() : null);
     const {error} = await sb.auth.signInWithPassword({email:em.value.trim(), password:pw.value});
     if(error) lm.textContent = errMsg(error);
   };
