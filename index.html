@@ -251,6 +251,7 @@ function viewDash(){
       <input class="i" type="date" id="base" value="${S.base}" style="max-width:170px">
       ${S.isAdmin?`<select class="i" id="own"><option value="all">전체 담당자</option>${owners.map(([id,n])=>`<option value="${id}" ${S.ownerFilter===id?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}
       <input class="i" id="q" placeholder="거래처 검색" value="${esc(S.q)}">
+      ${S.isAdmin?`<button class="btn sec" style="flex:0 0 auto" onclick="openTeam()">👥 동료 관리</button>`:''}
     </div>
     <div class="stats">
       <div class="stat"><div class="k">총 미수금</div><div class="v">${won(sum(c=>c.balance))}</div></div>
@@ -511,6 +512,34 @@ function viewPaste(){
       S.entryCustName=name; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid); } else go('dash');
     }catch(er){ pr.insertAdjacentHTML('beforeend', `<div class="err">${esc(errMsg(er))}</div>`); ps.disabled=false; }
+  };
+}
+
+// ===== 동료 관리 (관리자) =====
+async function openTeam(){ S.view='team'; await viewTeam(); }
+async function viewTeam(msg, ok){
+  if(!S.isAdmin){ go('dash'); return; }
+  const {data} = await sb.from('members').select('*').order('created_at'); S.members = data||[];
+  const cnt = id => S.summary.filter(c=>c.owner_id===id).length;
+  app.innerHTML = header('동료 관리', true) + `<div class="wrap">
+    <form id="inv" class="card"><h3>동료 초대</h3>
+      <div class="muted">초대 메일의 링크를 누르면 회전일 차트로 바로 들어와 비밀번호만 정하면 됩니다.</div>
+      <label class="f">이름 (회전일 차트에 표시)</label><input class="i" id="iname" required maxlength="20" placeholder="홍길동">
+      <label class="f">이메일</label><input class="i" id="iemail" type="email" required placeholder="name@example.com">
+      <div style="margin-top:14px"><button class="btn" style="width:100%" id="ibtn">초대 메일 보내기</button></div>
+      <div id="imsg" class="${ok?'ok':'err'}">${msg?esc(msg):''}</div>
+    </form>
+    <div class="card"><h3>등록된 담당자 (${S.members.length}명)</h3>
+      <div class="scroll"><table class="t"><tr><th>이름</th><th class="n">거래처</th><th>등록일</th></tr>
+      ${S.members.map(m=>`<tr><td>${esc(m.display_name)}${m.user_id===S.session.user.id?' <span class="badge b-admin">관리자</span>':''}</td>
+        <td class="n">${cnt(m.user_id)}곳</td><td>${md((m.created_at||'').slice(0,10))}</td></tr>`).join('')}</table></div>
+      <div class="muted" style="margin-top:8px">초대한 동료가 아직 비밀번호를 정하지 않았어도 여기에 나옵니다. 메일이 안 왔다면 스팸함을 확인하게 하세요.</div>
+    </div></div>`;
+  inv.onsubmit = async e=>{
+    e.preventDefault(); ibtn.disabled=true; const out=document.getElementById('imsg'); out.className='muted'; out.textContent='보내는 중...';
+    const {data, error} = await sb.functions.invoke('invite-member', {body:{email:iemail.value.trim(), name:iname.value.trim()}});
+    if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} ibtn.disabled=false; out.className='err'; out.textContent=m; return; }
+    await viewTeam(`${data.name}(${data.email})님에게 초대 메일을 보냈습니다.`, true);
   };
 }
 
