@@ -688,22 +688,30 @@ function go(v){
   S.view=v; if(v==='dash'){ refresh(true); }
 }
 async function logout(){ await sb.auth.signOut(); }
+let START_ID = 0;
 async function start(){
-  const {data:{session}} = await sb.auth.getSession(); S.session=session;
+  const my = ++START_ID;               // 동시에 여러 번 불려도 마지막 것만 화면에 반영
+  const stale = ()=> my !== START_ID;
+  const {data:{session}} = await sb.auth.getSession(); if(stale()) return; S.session=session;
   if(!session){ S.view='login'; viewLogin(); return; }
   if(S.setPw){ viewSetPassword(); return; }
   app.innerHTML = `<div class="empty">불러오는 중...</div>`;
+  // 10초 넘게 멈춰 있으면 다시 불러오기 버튼 표시 (빈 화면 방지)
+  setTimeout(()=>{ if(!stale() && S.view!=='dash' && /불러오는 중/.test(app.textContent)){
+    app.innerHTML = `<div class="empty">불러오는 데 시간이 오래 걸립니다.<br><br><button class="btn" onclick="location.reload()">다시 불러오기</button></div>`; } }, 10000);
   try{
-    await loadMe();
+    await loadMe(); if(stale()) return;
     if(!S.me){ viewName(); return; }
     if(S.ownerFilter==null) S.ownerFilter = S.isAdmin ? S.session.user.id : 'all';
-    await loadSummary(); S.view='dash'; pushNav({v:'dash'}, true); viewDash();
-  }catch(e){ app.innerHTML = header('회전일 차트') + `<div class="wrap"><div class="card err">${esc(errMsg(e))}</div></div>`; }
+    await loadSummary(); if(stale()) return;
+    S.view='dash'; pushNav({v:'dash'}, true); viewDash();
+  }catch(e){ if(stale()) return; app.innerHTML = header('회전일 차트') + `<div class="wrap"><div class="card err">${esc(errMsg(e))}</div><button class="btn" onclick="location.reload()">다시 불러오기</button></div>`; }
 }
 sb.auth.onAuthStateChange((ev, session)=>{
+  // 주의: 이 콜백 안에서 Supabase를 바로 다시 부르면 로그인 처리와 서로 기다리며 멈출 수 있음 → 한 박자 뒤에 실행
   if(ev==='PASSWORD_RECOVERY') S.setPw = true;
-  if(ev==='SIGNED_IN' && (!S.session || S.session.user.id!==session.user.id)){ S.session=session; start(); }
-  if(ev==='SIGNED_OUT'){ S.session=null; S.me=null; S.isAdmin=false; S.summary=[]; S.ownerFilter=null; S.view='login'; viewLogin(); }
+  if(ev==='SIGNED_IN' && (!S.session || S.session.user.id!==session.user.id)){ S.session=session; setTimeout(start, 0); }
+  if(ev==='SIGNED_OUT'){ S.session=null; S.me=null; S.isAdmin=false; S.summary=[]; S.ownerFilter=null; S.view='login'; setTimeout(()=>viewLogin(), 0); }
 });
 start();
 </script>
