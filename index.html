@@ -785,12 +785,19 @@ window.addEventListener('popstate', async e=>{
     else { S.view='dash'; await refresh(true); }
   } finally { NAV_POP = false; }
 });
-// 홈 화면에 추가한 아이폰 앱에는 밀어서 뒤로 가기가 없어서 직접 처리 (화면 왼쪽 끝에서 오른쪽으로 밀기)
-if(window.navigator.standalone){
-  let sx=null, sy=0;
-  document.addEventListener('touchstart', e=>{ const t=e.touches[0]; sx = t.clientX<28 ? t.clientX : null; sy=t.clientY; }, {passive:true});
+// 화면 왼쪽 끝에서 오른쪽으로 밀면 뒤로 가기 (앱이 직접 처리)
+//  - 홈 화면에 설치한 앱(아이폰·안드로이드): 브라우저의 밀기 뒤로 가기가 없음
+//  - 안드로이드 브라우저: 버튼 3개 내비게이션이면 밀기 뒤로 가기가 없음
+//  아이폰 사파리·크롬 탭은 자체 밀기 기능이 있어서 제외. 안드로이드 제스처 내비게이션은 시스템이 터치를 가져가므로(touchcancel) 두 번 뒤로 가지 않음
+const IS_IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+const IS_STANDALONE = window.navigator.standalone || (window.matchMedia && matchMedia('(display-mode: standalone)').matches);
+if(IS_STANDALONE || !IS_IOS){
+  let sx=null, sy=0, moved=false;
+  document.addEventListener('touchstart', e=>{ const t=e.touches[0]; sx = t.clientX<36 ? t.clientX : null; sy=t.clientY; moved=false; }, {passive:true});
+  document.addEventListener('touchmove', e=>{ if(sx!=null) moved=true; }, {passive:true});
+  document.addEventListener('touchcancel', ()=>{ sx=null; }, {passive:true});
   document.addEventListener('touchend', e=>{ if(sx==null) return; const t=e.changedTouches[0];
-    if(t.clientX-sx>70 && Math.abs(t.clientY-sy)<60 && S.view!=='dash') goBack(); sx=null; }, {passive:true});
+    if(moved && t.clientX-sx>70 && Math.abs(t.clientY-sy)<70 && S.view!=='dash' && S.view!=='login') goBack(); sx=null; }, {passive:true});
 }
 function go(v){
   // 코드에서 첫 화면으로 돌아갈 때는 기록도 한 칸 뒤로 (뒤로 가기가 꼬이지 않게)
