@@ -342,7 +342,7 @@ async function viewDetail(){
     </div>
     <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><button class="btn sm" onclick="openEntry()">+ 거래 입력</button></div>
       <div style="margin-top:8px">
-      ${entries.map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; const amt=isPay?e.pay_amount:e.sale_amount;
+      ${[...entries].reverse().map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; /* 잔액은 오래된 순으로 계산, 표시는 최근 순 */ const amt=isPay?e.pay_amount:e.sale_amount;
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
         <div class="l1"><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span><span class="kd">${e.kind}</span>
           <span class="it">${esc(e.item||'')}</span><span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span></div>
