@@ -255,7 +255,7 @@ function viewDash(){
         </div></button>`;}).join('')
     : `<div class="empty">${S.summary.length?'조건에 맞는 거래처가 없습니다.':'아직 거래처가 없습니다.<br>아래 <b>+ 거래 입력</b>으로 첫 거래를 넣으면 거래처가 자동으로 생깁니다.'}</div>`}
   </div>
-  <div class="fab"><button class="btn sec" onclick="openPaste()">붙여넣기</button><button class="btn" onclick="openEntry()">+ 거래 입력</button></div>`;
+  <div class="fab"><button class="btn sec" onclick="openPaste(false)">붙여넣기</button><button class="btn sec" onclick="openPaste(true)">📷 사진</button><button class="btn" onclick="openEntry()">+ 거래 입력</button></div>`;
   base.onchange = async ()=>{ S.base = base.value || todayStr(); await refresh(); };
   q.oninput = ()=>{ S.q=q.value.trim(); const p=q.selectionStart; viewDash(); const nq=document.getElementById('q'); nq.focus(); nq.setSelectionRange(p,p); };
   if(S.isAdmin) own.onchange = ()=>{ S.ownerFilter=own.value; viewDash(); };
@@ -394,24 +394,64 @@ async function ledgerCheck(cid, lbv){
 }
 
 // ===== 붙여넣기 (엑셀·거래장 여러 줄) =====
-function openPaste(){ S.view='paste'; viewPaste(); }
+function openPaste(photo){ S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; viewPaste(); }
+// 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
+async function shrink(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((ok,no)=>{const i=new Image(); i.onload=()=>ok(i); i.onerror=()=>no(new Error('사진을 열 수 없습니다. (JPG/PNG로 다시 시도)')); i.src=url;});
+    const k=Math.min(1, 2400/Math.max(img.naturalWidth,img.naturalHeight));
+    const cv=document.createElement('canvas'); cv.width=Math.round(img.naturalWidth*k); cv.height=Math.round(img.naturalHeight*k);
+    cv.getContext('2d').drawImage(img,0,0,cv.width,cv.height);
+    return await new Promise(ok=>cv.toBlob(ok,'image/jpeg',0.88));
+  } finally { URL.revokeObjectURL(url); }
+}
+async function readPhotos(files, onStatus){
+  const uid=S.session.user.id; const all=[]; let name='';
+  for(let n=0;n<files.length;n++){
+    onStatus(`${n+1}/${files.length}장 올리는 중...`);
+    const blob=await shrink(files[n]);
+    const path=`${uid}/${Date.now()}-${n}.jpg`;
+    const up=await sb.storage.from('ledger-photos').upload(path, blob, {contentType:'image/jpeg'}); if(up.error) throw up.error;
+    const ph=await sb.from('photos').insert({storage_path:path}).select('id').single(); if(ph.error) throw ph.error;
+    S.photoIds.push(ph.data.id);
+    onStatus(`${n+1}/${files.length}장 읽는 중... (10~30초)`);
+    const {data, error}=await sb.functions.invoke('read-ledger',{body:{photo_id:ph.data.id}});
+    if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} throw new Error(m); }
+    if(!name && data.customer_name) name=data.customer_name;
+    all.push(...data.rows.map(r=>({...r, _photo:n, _model:data.model})));
+  }
+  // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액·잔액 동일)은 중복 의심으로 표시
+  const seen=new Set();
+  const lines=all.map(r=>{ const key=[r.date,r.kind,r.amount,r.balance].join('|');
+    const dup = r.balance!=null && seen.has(key) && all.find(x=>[x.date,x.kind,x.amount,x.balance].join('|')===key)._photo!==r._photo;
+    seen.add(key);
+    return (dup?'#':r.unclear?'?':'')+[r.date||'', r.kind, r.amount, r.item||'', r.balance??''].join('\t'); });
+  return {name, text: lines.join('\n'), models:[...new Set(all.map(r=>r._model))]};
+}
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품'};
 function parseDate(s){ s=(s||'').trim(); if(!s) return null; const m=s.replace(/[./년월]/g,'-').replace(/일/,'').match(/^(\d{2,4})-(\d{1,2})-(\d{1,2})/);
   if(!m) return undefined; let y=Number(m[1]); if(y<100) y+=2000; return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; }
 function num(s){ const v=String(s||'').replace(/[^0-9-]/g,''); return v===''||v==='-'?null:Number(v); }
 function parsePaste(txt){
-  return txt.split(/\r?\n/).map(l=>l.trim()).filter(Boolean).map((l,i)=>{
+  return txt.split(/\r?\n/).map(l=>l.replace(/^[ ]+|[ ]+$/g,'')).filter(Boolean).map((l,i)=>{
+    const flag = l[0]==='#'?'dup': l[0]==='?'?'unc':''; if(flag) l=l.slice(1).trim();
     const c = l.includes('\t')? l.split('\t') : l.split(/,(?![0-9]{3})/);
     const kindRaw=(c[1]||'').trim(); const kind=KIND_MAP[kindRaw.replace(/\s/g,'')];
     const date=parseDate(c[0]); const amt=num(c[2]); const r={line:i+1, date, kind, amt, item:(c[3]||'').trim()||null, lb:num(c[4]), err:''};
     if(!kind) r.err='구분을 모름(판매/수금/이월/반품)'; else if(date===undefined) r.err='날짜 형식 오류'; else if(!date && kind!=='이월') r.err='날짜 없음';
     else if(!amt) r.err='금액 없음';
+    if(!r.err && flag==='dup') r.err='중복 의심(앞 사진과 같은 줄) – 저장하려면 맨 앞 # 지우기';
+    if(!r.err && flag==='unc') r.err='사진 글자 불명확 – 확인 후 맨 앞 ? 지우기';
     return r; });
 }
 function viewPaste(){
-  app.innerHTML = header('여러 줄 붙여넣기', true) + `<div class="wrap"><div class="card">
+  app.innerHTML = header(S.photoMode?'사진으로 입력':'여러 줄 붙여넣기', true) + `<div class="wrap"><div class="card">
     <label class="f">거래처</label><input class="i" id="pc" list="cl2" value="${esc(S.entryCustName)}" placeholder="병원이름"><datalist id="cl2">${custOptions()}</datalist>
-    <label class="f">거래 내역 (엑셀에서 복사해 붙여넣기) · 순서: 일자 / 구분 / 금액 / 품목 / 거래장잔액</label>
+    <label class="f">거래장 사진 (여러 장 가능 · 위에서부터 순서대로 찍은 순서로 선택)</label>
+    <label class="btn ${S.photoMode?'':'sec'}" style="display:block;text-align:center">📷 사진 선택해서 읽기<input type="file" id="pf" accept="image/*" multiple hidden></label>
+    <div id="pst" class="muted" style="margin-top:6px"></div>
+    <label class="f">거래 내역 (사진 읽은 결과 또는 엑셀 붙여넣기 · 고칠 곳은 여기서 직접 수정) · 순서: 일자 / 구분 / 금액 / 품목 / 거래장잔액</label>
     <textarea class="i" id="pt" placeholder="2026-05-13	판매	4503900	하이알포르테주	16657450&#10;2026-05-27	수금	2800000		13857450"></textarea>
     <div class="row" style="margin-top:10px"><button class="btn sec" id="pv">미리보기</button><button class="btn" id="ps" disabled>모두 저장</button></div>
     <div id="pr" style="margin-top:12px"></div></div></div>`;
@@ -429,14 +469,27 @@ function viewPaste(){
       <div class="${bad?'err':'ok'}">${rows.length}줄 중 ${bad?`${bad}줄 확인 필요 (오류 줄은 저장되지 않음, 불일치 줄은 '확인대기'로 저장)`:'모두 정상'}</div>`;
     ps.disabled = !name || !rows.some(r=>!r.err);
   };
+  pf.onchange = async ()=>{
+    const files=[...pf.files]; if(!files.length) return; pf.value='';
+    const st=document.getElementById('pst'); st.className='muted';
+    try{
+      const r=await readPhotos(files, m=>st.textContent=m);
+      if(!pc.value.trim() && r.name) pc.value=r.name;
+      pt.value = (pt.value.trim()? pt.value.trim()+'\n' : '') + r.text;
+      S.photoMode=true;
+      st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 아래 미리보기에서 빨간 줄을 사진과 대조하세요.`;
+      pv.click();
+    }catch(e){ st.className='err'; st.textContent='사진 읽기 실패: '+errMsg(e); }
+  };
   ps.onclick = async ()=>{
     ps.disabled=true; const name=pc.value.trim();
     try{
       const cid = await customerIdFor(name);
       const ins = rows.filter(r=>!r.err).map(r=>({customer_id:cid, kind:r.kind, entry_date:r.date, item: r.kind==='반품'?`${r.item||''}(반품 ${won(r.amt)}원)`.trim():r.item,
         sale_amount: (r.kind==='판매'||r.kind==='이월')?r.amt:0, pay_amount: r.kind==='수금'?r.amt:0, ledger_balance:r.lb,
-        input_method:'엑셀', status: r.mis?'확인대기':'확정'}));
+        input_method: S.photoMode?'사진':'엑셀', photo_id: S.photoIds[0]||null, status: r.mis?'확인대기':'확정'}));
       for(const row of ins){ const {error}=await sb.from('entries').insert(row); if(error) throw error; } // 한 줄씩 넣어 순서 보존
+      if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
       S.entryCustName=name; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid); } else go('dash');
     }catch(er){ pr.insertAdjacentHTML('beforeend', `<div class="err">${esc(errMsg(er))}</div>`); ps.disabled=false; }
