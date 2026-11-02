@@ -110,6 +110,16 @@ button.bk.sel{border:2px solid var(--brand2);box-shadow:0 0 0 2px rgba(47,85,151
 h3{font-size:15px;margin:0 0 8px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
 .kv div:nth-child(odd){color:var(--sub)}
+.mrow{background:#fff;border:1px solid var(--line);border-left:5px solid #cdd6e1;border-radius:12px;padding:10px 12px;margin:10px 0}
+.mrow.ok{border-left-color:var(--grn)} .mrow.mis{border-left-color:var(--org);background:#fffaf2} .mrow.err{border-left-color:var(--red);background:var(--red-bg)} .mrow.skip{opacity:.55}
+.mhead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+.mskip{display:flex;align-items:center;gap:6px;font-size:13px}
+.mdel{border:0;background:none;font-size:18px;cursor:pointer;padding:2px 4px}
+.mgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:8px 10px}
+.mgrid label{font-size:12.5px;color:var(--sub);display:block;min-width:0}
+.mgrid label .i{margin-top:3px;padding:9px 10px}
+.mgrid .span2{grid-column:1/-1}
+.mst{font-size:13px;margin-top:6px;color:var(--sub)} .mrow.mis .mst{color:var(--org);font-weight:600} .mrow.err .mst{color:var(--red);font-weight:600} .mrow.ok .mst{color:var(--grn)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:84px;background:#1b2430;color:#fff;padding:10px 16px;border-radius:10px;font-size:14px;z-index:50;max-width:90vw}
 .empty{text-align:center;color:var(--sub);padding:40px 10px}
 .seg{display:flex;border:1px solid #cdd6e1;border-radius:10px;overflow:hidden}
@@ -316,7 +326,7 @@ function viewDash(){
         </div></button>`;}).join('')
     : `<div class="empty">${S.summary.length?'조건에 맞는 거래처가 없습니다.':'아직 거래처가 없습니다.<br>아래 <b>+ 거래 입력</b>으로 첫 거래를 넣으면 거래처가 자동으로 생깁니다.'}</div>`}
   </div>
-  <div class="fab"><button class="btn sec" onclick="openPaste(false)">붙여넣기</button><button class="btn sec" onclick="openPaste(true)">📷 사진</button><button class="btn" onclick="openEntry()">+ 거래 입력</button></div>`;
+  <div class="fab"><button class="btn sec" onclick="openPaste(false)">여러 줄 입력</button><button class="btn sec" onclick="openPaste(true)">📷 사진</button><button class="btn" onclick="openEntry()">+ 거래 입력</button></div>`;
   base.onchange = async ()=>{ S.base = base.value || todayStr(); await refresh(); };
   q.oninput = ()=>{ S.q=q.value.trim(); const p=q.selectionStart; viewDash(); const nq=document.getElementById('q'); nq.focus(); nq.setSelectionRange(p,p); };
   if(S.isAdmin) own.onchange = ()=>{ S.ownerFilter=own.value; viewDash(); };
@@ -490,8 +500,14 @@ async function ledgerCheck(cid, lbv){
   return Number(lbv)===last._rb ? `거래장 잔액 ${won(lbv)}원과 일치 ✓` : `거래장 잔액과 불일치 ⚠ (계산 ${won(last._rb)} / 거래장 ${won(lbv)}, 차이 ${won(Number(lbv)-last._rb)})`;
 }
 
-// ===== 붙여넣기 (엑셀·거래장 여러 줄) =====
-function openPaste(photo){ pushNav({v:'paste', photo:!!photo}); S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; viewPaste(); }
+// ===== 여러 줄 입력 (표로 입력 · 📷 사진 · 엑셀 붙여넣기) =====
+const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item:'', lb:null, flag:'', skip:false});
+function openPaste(photo){
+  pushNav({v:'paste', photo:!!photo});
+  S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[];
+  S.rows=[blankRow()]; S.startBal=0; S.startCust=null;
+  viewPaste();
+}
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
 async function shrink(file){
   const url=URL.createObjectURL(file);
@@ -503,6 +519,7 @@ async function shrink(file){
     return await new Promise(ok=>cv.toBlob(ok,'image/jpeg',0.88));
   } finally { URL.revokeObjectURL(url); }
 }
+// 사진 → 서버에서 읽기 → 표의 줄로 변환
 async function readPhotos(files, onStatus){
   const uid=S.session.user.id; const all=[]; let name='';
   for(let n=0;n<files.length;n++){
@@ -518,80 +535,156 @@ async function readPhotos(files, onStatus){
     if(!name && data.customer_name) name=data.customer_name;
     all.push(...data.rows.map(r=>({...r, _photo:n, _model:data.model})));
   }
-  // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액·잔액 동일)은 중복 의심으로 표시
-  const seen=new Set();
-  const lines=all.map(r=>{ const key=[r.date,r.kind,r.amount,r.balance].join('|');
-    const dup = r.balance!=null && seen.has(key) && all.find(x=>[x.date,x.kind,x.amount,x.balance].join('|')===key)._photo!==r._photo;
-    seen.add(key);
-    return (dup?'#':r.unclear?'?':'')+[r.date||'', r.kind, r.amount, r.item||'', r.balance??''].join('\t'); });
-  return {name, text: lines.join('\n'), models:[...new Set(all.map(r=>r._model))]};
+  // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액·잔액 동일)은 중복 의심 → 기본 '저장 안 함'
+  const firstPhoto = {};
+  const rows = all.map(r=>{ const key=[r.date,r.kind,r.amount,r.balance].join('|');
+    const dup = r.balance!=null && firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
+    if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
+    const flag = dup?'dup': r.unclear?'unc':'';
+    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount||null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag}; });
+  return {name, rows, models:[...new Set(all.map(r=>r._model))]};
 }
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품'};
 function parseDate(s){ s=(s||'').trim(); if(!s) return null; const m=s.replace(/[./년월]/g,'-').replace(/일/,'').match(/^(\d{2,4})-(\d{1,2})-(\d{1,2})/);
   if(!m) return undefined; let y=Number(m[1]); if(y<100) y+=2000; return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; }
-function num(s){ const v=String(s||'').replace(/[^0-9-]/g,''); return v===''||v==='-'?null:Number(v); }
+function num(s){ const v=String(s??'').replace(/[^0-9-]/g,''); return v===''||v==='-'?null:Number(v); }
+// 엑셀에서 복사한 표(일자/구분/금액/품목/거래장잔액) → 표의 줄
 function parsePaste(txt){
-  return txt.split(/\r?\n/).map(l=>l.replace(/^[ ]+|[ ]+$/g,'')).filter(Boolean).map((l,i)=>{
-    const flag = l[0]==='#'?'dup': l[0]==='?'?'unc':''; if(flag) l=l.slice(1).trim();
+  return txt.split(/\r?\n/).map(l=>l.replace(/^[ ]+|[ ]+$/g,'')).filter(l=>l.replace(/\t/g,'').trim()).map(l=>{
     const c = l.includes('\t')? l.split('\t') : l.split(/,(?![0-9]{3})/);
-    const kindRaw=(c[1]||'').trim(); let kind=KIND_MAP[kindRaw.replace(/\s/g,'')];
-    const date=parseDate(c[0]); let amt=num(c[2]);
+    let kind=KIND_MAP[(c[1]||'').replace(/\s/g,'')]||'판매';
+    const d=parseDate(c[0]); let amt=num(c[2]);
     if(amt!=null && amt<0){ if(kind==='판매') kind='반품'; amt=Math.abs(amt); } // 거래장의 마이너스 판매 = 반품
-    const r={line:i+1, date, kind, amt, item:(c[3]||'').trim()||null, lb:num(c[4]), err:''};
-    if(!kind) r.err='구분을 모름(판매/수금/이월/반품)'; else if(date===undefined) r.err='날짜 형식 오류'; else if(!date && kind!=='이월') r.err='날짜 없음';
-    else if(!amt) r.err='금액 없음';
-    if(!r.err && flag==='dup') r.err='중복 의심(앞 사진과 같은 줄) – 저장하려면 맨 앞 # 지우기';
-    if(!r.err && flag==='unc') r.err='사진 글자 불명확 – 확인 후 맨 앞 ? 지우기';
-    return r; });
+    return {date: d||null, kind, amt, item:(c[3]||'').trim(), lb:num(c[4]), flag: d===undefined?'date':'', skip:false};
+  });
+}
+const isBlank = r => !r.amt && !r.item && r.lb==null;
+const isCredit = k => k==='수금' || k==='반품';
+function rowError(r){
+  if(r.skip) return '';
+  if(r.flag==='date') return '날짜를 다시 골라주세요';
+  if(!r.date && r.kind!=='이월') return '일자를 넣어주세요';
+  if(!r.amt) return '금액을 넣어주세요';
+  return '';
+}
+// 줄마다 계산 잔액·대조 결과 (저장 안 함·빈 줄 제외)
+function evalRows(){
+  let rb = S.startBal||0;
+  return S.rows.map(r=>{
+    if(isBlank(r)) return {state:'blank'};
+    if(r.skip) return {state:'skip'};
+    const err = rowError(r); if(err) return {state:'err', msg:err};
+    rb += isCredit(r.kind) ? -r.amt : r.amt;
+    if(r.lb==null) return {state:'ok', rb, msg:`계산 잔액 ${won(rb)}`};
+    return r.lb===rb ? {state:'ok', rb, msg:`거래장 잔액과 일치 ✓`} : {state:'mis', rb, msg:`불일치 ⚠ 계산 ${won(rb)} / 거래장 ${won(r.lb)}`};
+  });
+}
+function rowHtml(r,i){
+  const fmt = v => v==null||v===''?'':Number(v).toLocaleString('ko-KR');
+  return `<div class="mrow" data-i="${i}">
+    <div class="mhead"><b>${i+1}</b>
+      ${r.flag==='dup'||r.flag==='unc'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':'사진 글자가 흐림'})</span></label>`:''}
+      <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
+    <div class="mgrid">
+      <label>일자<input class="i" type="date" data-f="date" value="${r.date||''}"></label>
+      <label>구분<select class="i" data-f="kind">${['판매','수금','이월','반품'].map(k=>`<option ${r.kind===k?'selected':''}>${k}</option>`).join('')}</select></label>
+      <label>금액<input class="i" data-f="amt" inputmode="numeric" placeholder="0" value="${fmt(r.amt)}"></label>
+      <label>거래장 잔액<input class="i" data-f="lb" inputmode="numeric" placeholder="선택" value="${fmt(r.lb)}"></label>
+      <label class="span2">품목 / 적요<input class="i" data-f="item" placeholder="예: 하이알포르테주" value="${esc(r.item||'')}"></label>
+    </div>
+    <div class="mst" data-st></div>
+  </div>`;
+}
+function paintStatus(){
+  const ev = evalRows(); let save=0, bad=0, skip=0;
+  document.querySelectorAll('#rows .mrow').forEach(el=>{
+    const e = ev[+el.dataset.i]; const st = el.querySelector('[data-st]');
+    el.classList.remove('ok','mis','err','skip');
+    if(e.state==='blank'){ st.textContent=''; return; }
+    el.classList.add(e.state); st.textContent = e.state==='skip' ? '저장하지 않습니다' : e.msg;
+    if(e.state==='ok') save++; else if(e.state==='mis'){ save++; bad++; } else if(e.state==='err') bad++; else skip++;
+  });
+  const name = (document.getElementById('pc')||{}).value?.trim();
+  document.getElementById('msum').innerHTML = `저장할 줄 <b>${save}</b>${bad?` · <span style="color:var(--red)">확인 필요 ${bad}</span>`:''}${skip?` · 저장 안 함 ${skip}`:''}`
+    + (ev.some(e=>e.state==='mis')?'<div class="muted">불일치 줄은 \'확인대기\'로 저장됩니다.</div>':'');
+  document.getElementById('ps').disabled = !name || !save || ev.some(e=>e.state==='err');
+}
+function renderRows(){ document.getElementById('rows').innerHTML = S.rows.map(rowHtml).join(''); paintStatus(); }
+async function loadStartBal(){
+  const name=pc.value.trim(); const ex = S.summary.find(c=>c.customer_name===name && c.owner_id===S.session.user.id);
+  S.startBal=0; S.startCust=ex?ex.customer_id:null;
+  if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id);
+    const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
+  document.getElementById('mstart').textContent = ex ? `기존 거래처입니다. 지금 잔액 ${won(S.startBal)}원에 이어서 계산합니다.` : (name?'새 거래처로 만들어집니다.':'');
+  paintStatus();
 }
 function viewPaste(){
-  app.innerHTML = header(S.photoMode?'사진으로 입력':'여러 줄 붙여넣기', true) + `<div class="wrap"><div class="card">
+  app.innerHTML = header(S.photoMode?'사진으로 입력':'여러 줄 입력', true) + `<div class="wrap"><div class="card">
     <label class="f">거래처</label><input class="i" id="pc" list="cl2" value="${esc(S.entryCustName)}" placeholder="병원이름"><datalist id="cl2">${custOptions()}</datalist>
-    <label class="f">거래장 사진 (여러 장 가능 · 위에서부터 순서대로 찍은 순서로 선택)</label>
-    <label class="btn ${S.photoMode?'':'sec'}" style="display:block;text-align:center">📷 사진 선택해서 읽기<input type="file" id="pf" accept="image/*" multiple hidden></label>
-    <div id="pst" class="muted" style="margin-top:6px"></div>
-    <label class="f">거래 내역 (사진 읽은 결과 또는 엑셀 붙여넣기 · 고칠 곳은 여기서 직접 수정) · 순서: 일자 / 구분 / 금액 / 품목 / 거래장잔액</label>
-    <textarea class="i" id="pt" placeholder="2026-05-13	판매	4503900	하이알포르테주	16657450&#10;2026-05-27	수금	2800000		13857450"></textarea>
-    <div class="row" style="margin-top:10px"><button class="btn sec" id="pv">미리보기</button><button class="btn" id="ps" disabled>모두 저장</button></div>
-    <div id="pr" style="margin-top:12px"></div></div></div>`;
-  let rows=[];
-  pv.onclick = async ()=>{
-    rows = parsePaste(pt.value);
-    let start = 0; const name=pc.value.trim(); const ex = S.summary.find(c=>c.customer_name===name && c.owner_id===S.session.user.id);
-    if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id); const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); start=r?r._rb:0; }
-    let rb=start, bad=0;
-    rows.forEach(r=>{ if(r.err){bad++;return;} rb += (r.kind==='수금'||r.kind==='반품')? -r.amt : r.amt; r.rb=rb; r.mis = r.lb!=null && r.lb!==rb; if(r.mis) bad++; });
-    pr.innerHTML = `${ex?`<div class="muted">기존 잔액 ${won(start)}원에 이어서 계산합니다.</div>`:''}
-      <div class="scroll"><table class="t"><tr><th>#</th><th>일자</th><th>구분</th><th class="n">금액</th><th>품목</th><th class="n">계산 잔액</th><th class="n">거래장</th><th>확인</th></tr>
-      ${rows.map(r=>`<tr class="${r.err||r.mis?'bad':''}"><td>${r.line}</td><td>${r.date||'-'}</td><td>${r.kind||'?'}</td><td class="n">${won(r.amt)}</td><td>${esc(r.item||'')}</td>
-        <td class="n">${r.rb!=null?won(r.rb):''}</td><td class="n">${r.lb!=null?won(r.lb):''}</td><td>${r.err?esc(r.err):r.mis?'불일치 ⚠':'✓'}</td></tr>`).join('')}</table></div>
-      <div class="${bad?'err':'ok'}">${rows.length}줄 중 ${bad?`${bad}줄 확인 필요 (오류 줄은 저장되지 않음, 불일치 줄은 '확인대기'로 저장)`:'모두 정상'}</div>`;
-    ps.disabled = !name || !rows.some(r=>!r.err);
-  };
+    <div id="mstart" class="muted" style="margin-top:6px"></div>
+    <label class="btn ${S.photoMode?'':'sec'}" style="display:block;text-align:center;margin-top:12px">📷 거래장 사진으로 채우기<input type="file" id="pf" accept="image/*" multiple hidden></label>
+    <div id="pst" class="muted" style="margin-top:6px">여러 장이면 위에서부터 찍은 순서대로 고르세요. 읽은 결과가 아래 표에 채워지고, 틀린 칸만 고치면 됩니다.</div>
+  </div>
+  <div id="rows"></div>
+  <button type="button" class="btn sec" id="addRow" style="width:100%">+ 줄 추가</button>
+  <div class="muted" style="margin-top:8px">PC에서는 엑셀 표(일자·구분·금액·품목·거래장잔액)를 복사해 아무 칸에나 붙여넣으면 줄이 자동으로 채워집니다.</div>
+  <div class="card" style="position:sticky;bottom:0;margin-bottom:0"><div id="msum" class="muted"></div>
+    <button class="btn" id="ps" style="width:100%;margin-top:8px" disabled>모두 저장</button><div id="perr" class="err"></div></div>
+  </div>`;
+  renderRows();
+  pc.onchange = loadStartBal; pc.oninput = paintStatus;
+  const box = document.getElementById('rows');
+  box.addEventListener('input', e=>{
+    const el=e.target, f=el.dataset.f; if(!f) return; const i=+el.closest('.mrow').dataset.i; const r=S.rows[i];
+    if(f==='amt'||f==='lb'){ const v=num(el.value); r[f]=v==null?null:Math.abs(v); el.value = r[f]==null?'':r[f].toLocaleString('ko-KR'); }
+    else if(f==='skip') r.skip = el.checked;
+    else if(f==='date'){ r.date = el.value||null; if(r.flag==='date') r.flag=''; }
+    else r[f] = el.value;
+    paintStatus();
+  });
+  box.addEventListener('change', e=>{
+    const el=e.target; if(el.dataset.f!=='kind') return; const i=+el.closest('.mrow').dataset.i; const r=S.rows[i]; r.kind=el.value;
+    const it = el.closest('.mrow').querySelector('[data-f=item]');
+    if(r.kind==='수금' && !r.item){ r.item='수금'; it.value='수금'; } else if(r.kind!=='수금' && r.item==='수금'){ r.item=''; it.value=''; }
+    paintStatus();
+  });
+  box.addEventListener('click', e=>{
+    const b=e.target.closest('[data-del]'); if(!b) return; S.rows.splice(+b.dataset.del,1); if(!S.rows.length) S.rows.push(blankRow()); renderRows();
+  });
+  // 엑셀에서 복사한 여러 칸/여러 줄을 붙여넣으면 표로 채움
+  box.addEventListener('paste', e=>{
+    const t=(e.clipboardData||window.clipboardData)?.getData('text')||''; if(!/[\t\n]/.test(t.trim())) return;
+    e.preventDefault(); const add=parsePaste(t); if(!add.length) return;
+    while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
+    S.rows.push(...add); renderRows(); toast(`${add.length}줄을 채웠습니다.`);
+  });
+  addRow.onclick = ()=>{ const last=S.rows[S.rows.length-1]; S.rows.push(blankRow(last&&last.date)); renderRows();
+    const els=document.querySelectorAll('#rows .mrow'); els[els.length-1].scrollIntoView({block:'center'}); };
   pf.onchange = async ()=>{
     const files=[...pf.files]; if(!files.length) return; pf.value='';
     const st=document.getElementById('pst'); st.className='muted';
     try{
       const r=await readPhotos(files, m=>st.textContent=m);
-      if(!pc.value.trim() && r.name) pc.value=r.name;
-      pt.value = (pt.value.trim()? pt.value.trim()+'\n' : '') + r.text;
-      S.photoMode=true;
-      st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 아래 미리보기에서 빨간 줄을 사진과 대조하세요.`;
-      pv.click();
+      if(!pc.value.trim() && r.name){ pc.value=r.name; await loadStartBal(); }
+      while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
+      S.rows.push(...r.rows); if(!S.rows.length) S.rows.push(blankRow());
+      S.photoMode=true; renderRows();
+      st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 빨간 줄만 사진과 대조해서 고치세요.`;
     }catch(e){ st.className='err'; st.textContent='사진 읽기 실패: '+errMsg(e); }
   };
   ps.onclick = async ()=>{
-    ps.disabled=true; const name=pc.value.trim();
+    ps.disabled=true; const name=pc.value.trim(); const ev=evalRows(); perr.textContent='';
     try{
       const cid = await customerIdFor(name);
-      const ins = rows.filter(r=>!r.err).map(r=>({customer_id:cid, kind:r.kind, entry_date:r.date, item: r.item,
-        sale_amount: (r.kind==='판매'||r.kind==='이월')?r.amt:0, pay_amount: (r.kind==='수금'||r.kind==='반품')?r.amt:0, ledger_balance:r.lb,
-        input_method: S.photoMode?'사진':'엑셀', photo_id: S.photoIds[0]||null, status: r.mis?'확인대기':'확정'}));
+      const ins = S.rows.map((r,i)=>({r, e:ev[i]})).filter(x=>x.e.state==='ok'||x.e.state==='mis').map(({r,e})=>({
+        customer_id:cid, kind:r.kind, entry_date:r.date||null, item:r.item||null,
+        sale_amount: isCredit(r.kind)?0:r.amt, pay_amount: isCredit(r.kind)?r.amt:0, ledger_balance:r.lb,
+        input_method: S.photoMode?'사진':'엑셀', photo_id: S.photoIds[0]||null, status: e.state==='mis'?'확인대기':'확정'}));
       for(const row of ins){ const {error}=await sb.from('entries').insert(row); if(error) throw error; } // 한 줄씩 넣어 순서 보존
       if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
       S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
-      const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash'); // 붙여넣기 화면 기록을 거래처 상세로 바꿈
-    }catch(er){ pr.insertAdjacentHTML('beforeend', `<div class="err">${esc(errMsg(er))}</div>`); ps.disabled=false; }
+      const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash');
+    }catch(er){ perr.textContent=errMsg(er); ps.disabled=false; }
   };
 }
 
