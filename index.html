@@ -176,7 +176,7 @@ async function loadSummary(){
   const {data, error} = await sb.rpc('customer_summary', {p_base: S.base});
   if(error) throw error;
   S.summary = (data||[]).map(c=>({...c, _s: status(c)}))
-    .sort((a,b)=> ORDER[a._s.k]-ORDER[b._s.k] || (b.turnover_days??-1)-(a.turnover_days??-1) || a.customer_name.localeCompare(b.customer_name,'ko'));
+    .sort((a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko')); // 거래처 이름 가나다순
 }
 
 // ===== 화면: 공통 헤더 =====
