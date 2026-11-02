@@ -263,7 +263,7 @@ function viewDash(){
       <input class="i" type="date" id="base" value="${S.base}" style="max-width:170px">
       ${S.isAdmin?`<select class="i" id="own"><option value="all">전체 담당자</option>${owners.map(([id,n])=>`<option value="${id}" ${S.ownerFilter===id?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}
       <input class="i" id="q" placeholder="거래처 검색" value="${esc(S.q)}">
-      ${S.isAdmin?`<button class="btn sec" style="flex:0 0 auto" onclick="openTeam()">👥 동료 관리</button>`:''}
+      ${S.isAdmin?`<button class="btn sec" style="flex:0 0 auto" onclick="openTeam()">👥 동료 관리</button><button class="btn sec" style="flex:0 0 auto" onclick="openDocs()">📘 설명서</button>`:''}
     </div>
     <div class="stats">
       <div class="stat"><div class="k">총 미수금</div><div class="v">${won(sum(c=>c.balance))}</div></div>
@@ -569,6 +569,52 @@ async function viewTeam(msg, ok){
     if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} ibtn.disabled=false; out.className='err'; out.textContent=m; return; }
     await viewTeam(`${data.name}(${data.email})님에게 초대 메일을 보냈습니다.`, true);
   };
+}
+
+// ===== 설명서 (관리자 전용) =====
+// PDF는 암호화된 파일(guide.bin, admin.bin)로 앱과 함께 올라가 있고, 여는 열쇠는 관리자만 서버에서 받을 수 있음
+const DOCS = {
+  guide: {file:'guide.bin', name:'회전일 차트 사용 설명서.pdf', title:'회전일 차트 사용 설명서', desc:'동료(담당자)용. 시작하기·로그인·차트 보기·거래 입력·계산 기준·자주 묻는 질문', share:true},
+  admin: {file:'admin.bin', name:'회전일 차트 관리자 설명서.pdf', title:'회전일 차트 관리자 설명서', desc:'관리자 본인용. 동료 초대·담당자 변경·설정·비용', share:false}
+};
+const DOC_VER = '20261102';
+const docCache = {};
+async function loadDoc(k){
+  if(docCache[k]) return docCache[k];
+  const {data:keyB64, error} = await sb.schema('public').rpc('get_docs_key');
+  if(error || !keyB64) throw new Error('관리자만 열 수 있습니다.');
+  const res = await fetch(`${DOCS[k].file}?v=${DOC_VER}`); if(!res.ok) throw new Error('설명서 파일을 불러오지 못했습니다.');
+  const buf = new Uint8Array(await res.arrayBuffer());
+  const raw = Uint8Array.from(atob(keyB64), c=>c.charCodeAt(0));
+  const key = await crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['decrypt']);
+  const pdf = await crypto.subtle.decrypt({name:'AES-GCM', iv:buf.slice(0,12)}, key, buf.slice(12));
+  return (docCache[k] = new File([pdf], DOCS[k].name, {type:'application/pdf'}));
+}
+async function docAction(k, act){
+  const w = act==='view' ? window.open('', '_blank') : null; // 팝업 차단 방지
+  try{
+    const f = await loadDoc(k); const url = URL.createObjectURL(f);
+    if(act==='view'){ if(w) w.location.href=url; else location.href=url; }
+    else if(act==='save'){ const a=document.createElement('a'); a.href=url; a.download=f.name; a.rel='noopener'; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(), 1000); }
+    else if(act==='share'){
+      if(navigator.canShare && navigator.canShare({files:[f]})) await navigator.share({files:[f], title:DOCS[k].title});
+      else { const a=document.createElement('a'); a.href=url; a.download=f.name; a.click(); toast('이 기기는 바로 공유가 안 돼서 파일로 받았습니다. 받은 파일을 카톡 등으로 보내세요.'); }
+    }
+    setTimeout(()=>URL.revokeObjectURL(url), 60000);
+  }catch(e){ if(w) w.close(); if(e && e.name==='AbortError') return; toast(errMsg(e)); }
+}
+function openDocs(){
+  if(!S.isAdmin){ go('dash'); return; }
+  S.view='docs';
+  app.innerHTML = header('설명서', true) + `<div class="wrap">
+    ${Object.entries(DOCS).map(([k,d])=>`<div class="card"><h3>📘 ${esc(d.title)}</h3><div class="muted">${esc(d.desc)}</div>
+      <div class="row" style="margin-top:12px">
+        <button class="btn sm sec" onclick="docAction('${k}','view')">보기</button>
+        <button class="btn sm sec" onclick="docAction('${k}','save')">PDF 받기</button>
+        ${d.share?`<button class="btn sm" onclick="docAction('${k}','share')">공유하기 (카톡·문자·메일)</button>`:'<span class="muted">동료에게 보내지 마세요</span>'}
+      </div></div>`).join('')}
+    <div class="muted">설명서는 관리자만 이 화면에서 볼 수 있습니다. 동료에게는 사용 설명서 PDF를 공유해 주세요.</div>
+  </div>`;
 }
 
 // ===== 흐름 =====
