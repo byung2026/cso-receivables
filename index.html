@@ -37,7 +37,10 @@ header.top .who{font-size:13px;opacity:.9;white-space:nowrap}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .grow{flex:1;min-width:0}
 label.f{display:block;font-size:13px;color:var(--sub);margin:10px 0 4px}
-input.i,select.i,textarea.i{width:100%;padding:11px 12px;border:1px solid #cdd6e1;border-radius:10px;background:#fff}
+input.i,select.i,textarea.i{width:100%;max-width:100%;min-width:0;padding:11px 12px;border:1px solid #cdd6e1;border-radius:10px;background:#fff}
+/* 아이폰 Safari: 날짜 칸이 옆 칸을 덮지 않게 */
+input.i[type=date]{-webkit-appearance:none;appearance:none;display:block;min-height:46px;text-align:left}
+input.i[type=date]::-webkit-date-and-time-value{text-align:left}
 textarea.i{min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:13px}
 .muted{color:var(--sub);font-size:13px}
 .err{color:var(--red);font-size:14px;margin-top:8px;white-space:pre-wrap}
