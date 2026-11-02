@@ -346,11 +346,11 @@ function openEntry(){ S.view='entry'; viewEntry(); }
 function viewEntry(msg, ok){
   app.innerHTML = header('거래 입력', true) + `<div class="wrap"><form id="ef" class="card">
     <label class="f">거래처 (처음 입력하면 자동으로 생성됩니다)</label>
-    <input class="i" id="cn" list="cl" value="${esc(S.entryCustName)}" required placeholder="예: 우리연합정형외과"><datalist id="cl">${custOptions()}</datalist>
+    <input class="i" id="cn" list="cl" value="${esc(S.entryCustName)}" required placeholder="병원이름"><datalist id="cl">${custOptions()}</datalist>
     <label class="f">구분</label>
     <div class="seg" id="kd">${['판매','수금','이월','반품'].map((k,i)=>`<button type="button" data-k="${k}" class="${i===0?'on':''}">${k}</button>`).join('')}</div>
     <div class="row"><div class="grow"><label class="f">일자 <span id="dh" class="muted"></span></label><input class="i" id="dt" type="date" value="${todayStr()}"></div>
-      <div class="grow"><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="4,503,900"></div></div>
+      <div class="grow"><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="0"></div></div>
     <label class="f">품목 / 적요 (선택)</label><input class="i" id="it" placeholder="예: 하이알포르테주">
     <label class="f">거래장 잔액 (선택 · 넣으면 자동 대조)</label><input class="i" id="lb" inputmode="numeric" placeholder="거래 후 잔액">
     <div style="margin-top:14px" class="row"><button class="btn grow">저장</button></div>
@@ -410,7 +410,7 @@ function parsePaste(txt){
 }
 function viewPaste(){
   app.innerHTML = header('여러 줄 붙여넣기', true) + `<div class="wrap"><div class="card">
-    <label class="f">거래처</label><input class="i" id="pc" list="cl2" value="${esc(S.entryCustName)}" placeholder="예: 우리연합정형외과"><datalist id="cl2">${custOptions()}</datalist>
+    <label class="f">거래처</label><input class="i" id="pc" list="cl2" value="${esc(S.entryCustName)}" placeholder="병원이름"><datalist id="cl2">${custOptions()}</datalist>
     <label class="f">거래 내역 (엑셀에서 복사해 붙여넣기) · 순서: 일자 / 구분 / 금액 / 품목 / 거래장잔액</label>
     <textarea class="i" id="pt" placeholder="2026-05-13	판매	4503900	하이알포르테주	16657450&#10;2026-05-27	수금	2800000		13857450"></textarea>
     <div class="row" style="margin-top:10px"><button class="btn sec" id="pv">미리보기</button><button class="btn" id="ps" disabled>모두 저장</button></div>
