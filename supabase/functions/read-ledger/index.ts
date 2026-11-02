@@ -18,6 +18,7 @@ const PROMPT = `이 사진은 한국 의약품 도매/제약회사의 거래처 
 
 규칙
 - kind: 매출·출고·판매 → "판매", 입금·수금 → "수금", 전기이월·전월이월·이월 → "이월", 반품 → "반품"
+- 금액이 마이너스(-)로 찍힌 판매 행은 반품입니다: kind "반품", amount는 양수로.
 - amount: 그 행의 거래 총액(원, 부가세 포함 합계). 단가·수량이 아니라 금액/합계 칸의 값. 쉼표 없이 정수.
 - balance: 그 행 거래 후 잔액 칸의 값. 없으면 null.
 - date: YYYY-MM-DD. 연도가 생략됐으면 표의 다른 날짜·출력일로 추정. 이월 행에 날짜가 없으면 "".
@@ -95,7 +96,11 @@ async function readWith(model: string, key: string, b64: string, mediaType: stri
   const tu = (body.content ?? []).find((c: { type: string }) => c.type === "tool_use");
   if (!tu) throw new Error("읽기 결과가 비어 있습니다.");
   const out = tu.input as { customer_name: string; rows: Row[]; notes?: string };
-  out.rows = (out.rows ?? []).map((r) => ({ ...r, amount: Math.abs(Math.round(Number(r.amount) || 0)) }));
+  out.rows = (out.rows ?? []).map((r) => {
+    const a = Math.round(Number(r.amount) || 0);
+    const kind = a < 0 && r.kind === "판매" ? "반품" : r.kind; // 마이너스 판매 = 반품
+    return { ...r, kind, amount: Math.abs(a) };
+  });
   return { ...out, usage: body.usage };
 }
 

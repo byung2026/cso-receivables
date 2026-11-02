@@ -291,7 +291,7 @@ function viewDash(){
 async function openCust(id){ S.custId=id; S.view='detail'; await viewDetail(); }
 function runCheck(entries){
   let rb=0; return entries.map(e=>{
-    const counted = e.status==='확정' && e.kind!=='반품';
+    const counted = e.status==='확정';
     if(counted) rb += Number(e.sale_amount) - Number(e.pay_amount);
     const mism = counted && e.ledger_balance!=null && Number(e.ledger_balance)!==rb;
     return {...e, _rb: counted? rb : null, _mis: mism};
@@ -342,13 +342,13 @@ async function viewDetail(){
     </div>
     <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><button class="btn sm" onclick="openEntry()">+ 거래 입력</button></div>
       <div style="margin-top:8px">
-      ${entries.map(e=>{ const isPay=e.kind==='수금'; const amt=isPay?e.pay_amount:e.sale_amount;
+      ${entries.map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; const amt=isPay?e.pay_amount:e.sale_amount;
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
         <div class="l1"><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span><span class="kd">${e.kind}</span>
-          <span class="it">${esc(e.item||'')}</span><span class="amt ${isPay?'p':'s'}">${e.kind==='반품'?'':(isPay?'−':'+')+won(amt)}</span></div>
+          <span class="it">${esc(e.item||'')}</span><span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span></div>
         <div class="l2"><span>계산 ${e._rb!=null?won(e._rb):'-'}</span>${e.ledger_balance!=null?`<span>거래장 ${won(e.ledger_balance)} ${e._mis?'<b style="color:var(--red)">불일치 ⚠</b>':'✓'}</span>`:''}
           <span class="sp"></span>
-          ${e.kind==='반품'?'<span class="chip c-warn">반품 보류</span>':e.status==='확인대기'?`<button class="btn sm sec" onclick="confirmEntry('${e.id}')">확정</button>`:''}
+          ${e.status==='확인대기'?`<button class="btn sm sec" onclick="confirmEntry('${e.id}')">확정</button>`:''}
           <button class="btn sm danger" onclick="delEntry('${e.id}')">삭제</button></div></div>`;}).join('')}
       </div>
       ${entries.some(e=>e._mis)?'<div class="err">⚠ 거래장 잔액과 계산 잔액이 다른 행이 있습니다. 빠진 거래나 금액 오타를 확인하세요.</div>':''}
@@ -382,7 +382,7 @@ function viewEntry(msg, ok){
     <label class="f">거래장 잔액 (선택 · 넣으면 자동 대조)</label><input class="i" id="lb" inputmode="numeric" placeholder="거래 후 잔액">
     <div style="margin-top:14px" class="row"><button class="btn grow">저장</button></div>
     <div id="em2" class="${ok?'ok':'err'}">${msg||''}</div>
-    <div class="muted" style="margin-top:10px">· 같은 거래처는 거래장 순서대로 입력하세요.<br>· 반품은 처리 규칙 확인 전이라 기록만 되고 계산에는 빠집니다.</div>
+    <div class="muted" style="margin-top:10px">· 같은 거래처는 거래장 순서대로 입력하세요.<br>· 반품은 수금처럼 가장 오래된 미수금부터 차감됩니다. 금액은 마이너스 없이 그대로 넣으세요.</div>
   </form></div>`;
   let kind='판매';
   kd.querySelectorAll('button').forEach(b=>b.onclick=()=>{ kd.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); kind=b.dataset.k;
@@ -397,9 +397,8 @@ function viewEntry(msg, ok){
     try{
       const cid = await customerIdFor(name);
       const row = {customer_id:cid, kind, entry_date: dt.value||null, item: it.value.trim()||null,
-        sale_amount: kind==='수금'?0:amt, pay_amount: kind==='수금'?amt:0,
+        sale_amount: (kind==='수금'||kind==='반품')?0:amt, pay_amount: (kind==='수금'||kind==='반품')?amt:0,
         ledger_balance: lb.value? Number(lb.value.replace(/[^0-9-]/g,'')) : null, input_method:'직접', status:'확정'};
-      if(kind==='반품'){ row.sale_amount=0; row.pay_amount=0; row.item=(row.item?row.item+' ':'')+`(반품 ${won(amt)}원)`; }
       const {error} = await sb.from('entries').insert(row); if(error) throw error;
       S.entryCustName = name;
       const chk = await ledgerCheck(cid, row.ledger_balance);
@@ -464,8 +463,10 @@ function parsePaste(txt){
   return txt.split(/\r?\n/).map(l=>l.replace(/^[ ]+|[ ]+$/g,'')).filter(Boolean).map((l,i)=>{
     const flag = l[0]==='#'?'dup': l[0]==='?'?'unc':''; if(flag) l=l.slice(1).trim();
     const c = l.includes('\t')? l.split('\t') : l.split(/,(?![0-9]{3})/);
-    const kindRaw=(c[1]||'').trim(); const kind=KIND_MAP[kindRaw.replace(/\s/g,'')];
-    const date=parseDate(c[0]); const amt=num(c[2]); const r={line:i+1, date, kind, amt, item:(c[3]||'').trim()||null, lb:num(c[4]), err:''};
+    const kindRaw=(c[1]||'').trim(); let kind=KIND_MAP[kindRaw.replace(/\s/g,'')];
+    const date=parseDate(c[0]); let amt=num(c[2]);
+    if(amt!=null && amt<0){ if(kind==='판매') kind='반품'; amt=Math.abs(amt); } // 거래장의 마이너스 판매 = 반품
+    const r={line:i+1, date, kind, amt, item:(c[3]||'').trim()||null, lb:num(c[4]), err:''};
     if(!kind) r.err='구분을 모름(판매/수금/이월/반품)'; else if(date===undefined) r.err='날짜 형식 오류'; else if(!date && kind!=='이월') r.err='날짜 없음';
     else if(!amt) r.err='금액 없음';
     if(!r.err && flag==='dup') r.err='중복 의심(앞 사진과 같은 줄) – 저장하려면 맨 앞 # 지우기';
@@ -488,7 +489,7 @@ function viewPaste(){
     let start = 0; const name=pc.value.trim(); const ex = S.summary.find(c=>c.customer_name===name && c.owner_id===S.session.user.id);
     if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id); const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); start=r?r._rb:0; }
     let rb=start, bad=0;
-    rows.forEach(r=>{ if(r.err){bad++;return;} if(r.kind!=='반품') rb += r.kind==='수금'? -r.amt : r.amt; r.rb=rb; r.mis = r.lb!=null && r.lb!==rb; if(r.mis) bad++; });
+    rows.forEach(r=>{ if(r.err){bad++;return;} rb += (r.kind==='수금'||r.kind==='반품')? -r.amt : r.amt; r.rb=rb; r.mis = r.lb!=null && r.lb!==rb; if(r.mis) bad++; });
     pr.innerHTML = `${ex?`<div class="muted">기존 잔액 ${won(start)}원에 이어서 계산합니다.</div>`:''}
       <div class="scroll"><table class="t"><tr><th>#</th><th>일자</th><th>구분</th><th class="n">금액</th><th>품목</th><th class="n">계산 잔액</th><th class="n">거래장</th><th>확인</th></tr>
       ${rows.map(r=>`<tr class="${r.err||r.mis?'bad':''}"><td>${r.line}</td><td>${r.date||'-'}</td><td>${r.kind||'?'}</td><td class="n">${won(r.amt)}</td><td>${esc(r.item||'')}</td>
@@ -512,8 +513,8 @@ function viewPaste(){
     ps.disabled=true; const name=pc.value.trim();
     try{
       const cid = await customerIdFor(name);
-      const ins = rows.filter(r=>!r.err).map(r=>({customer_id:cid, kind:r.kind, entry_date:r.date, item: r.kind==='반품'?`${r.item||''}(반품 ${won(r.amt)}원)`.trim():r.item,
-        sale_amount: (r.kind==='판매'||r.kind==='이월')?r.amt:0, pay_amount: r.kind==='수금'?r.amt:0, ledger_balance:r.lb,
+      const ins = rows.filter(r=>!r.err).map(r=>({customer_id:cid, kind:r.kind, entry_date:r.date, item: r.item,
+        sale_amount: (r.kind==='판매'||r.kind==='이월')?r.amt:0, pay_amount: (r.kind==='수금'||r.kind==='반품')?r.amt:0, ledger_balance:r.lb,
         input_method: S.photoMode?'사진':'엑셀', photo_id: S.photoIds[0]||null, status: r.mis?'확인대기':'확정'}));
       for(const row of ins){ const {error}=await sb.from('entries').insert(row); if(error) throw error; } // 한 줄씩 넣어 순서 보존
       if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
