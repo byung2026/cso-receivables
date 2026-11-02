@@ -131,7 +131,8 @@ const PREF = {
   get(k){ try{ return localStorage.getItem(k); }catch(_){ return null; } },
   set(k,v){ try{ v==null? localStorage.removeItem(k) : localStorage.setItem(k,v); }catch(_){} }
 };
-const autoLogin = ()=> PREF.get('cso_auto') !== '0';   // 기본: 자동 로그인 켜짐
+const autoLogin = ()=> PREF.get('cso_auto') === '1';   // 기본: 자동 로그인 꺼짐 (체크했을 때만 유지)
+const saveIdOn = ()=> PREF.get('cso_saveid') !== '0';   // 기본: 아이디 저장 켜짐
 // 자동 로그인 켜짐 → 로그인 유지(localStorage) / 꺼짐 → 브라우저를 닫으면 로그아웃(sessionStorage)
 const authStorage = {
   getItem(k){ try{ return (autoLogin()?localStorage:sessionStorage).getItem(k); }catch(_){ return null; } },
@@ -208,7 +209,7 @@ function viewLogin(msg){
       <label class="f">이메일</label><input class="i" id="em" type="email" autocomplete="username" required value="${esc(PREF.get('cso_email')||'')}">
       <label class="f">비밀번호</label><input class="i" id="pw" type="password" autocomplete="current-password" required>
       <div class="row" style="margin-top:12px;gap:18px">
-        <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="saveId" ${PREF.get('cso_email')?'checked':''} style="width:18px;height:18px">아이디 저장</label>
+        <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="saveId" ${saveIdOn()?'checked':''} style="width:18px;height:18px">아이디 저장</label>
         <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="autoLg" ${autoLogin()?'checked':''} style="width:18px;height:18px">자동 로그인</label>
       </div>
       <div style="margin-top:14px"><button class="btn" style="width:100%">로그인</button></div>
@@ -218,6 +219,7 @@ function viewLogin(msg){
   document.getElementById('lf').onsubmit = async e=>{
     e.preventDefault(); const lm=document.getElementById('lm'); lm.textContent='로그인 중...';
     PREF.set('cso_auto', autoLg.checked ? '1' : '0');
+    PREF.set('cso_saveid', saveId.checked ? '1' : '0');
     PREF.set('cso_email', saveId.checked ? em.value.trim() : null);
     const {error} = await sb.auth.signInWithPassword({email:em.value.trim(), password:pw.value});
     if(error) lm.textContent = errMsg(error);
