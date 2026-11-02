@@ -3,11 +3,11 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>CSO 미수금 회전일</title>
+<title>회전일 차트</title>
 <meta name="theme-color" content="#1f3864">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="미수금">
+<meta name="apple-mobile-web-app-title" content="회전일 차트">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <style>
 :root{
@@ -183,7 +183,7 @@ function header(title, back){
 // ===== 로그인 =====
 function viewLogin(msg){
   app.innerHTML = `<div class="login">
-    <h2>CSO 미수금 회전일</h2><div class="muted">초대받은 이메일로 로그인하세요.</div>
+    <h2>회전일 차트</h2><div class="muted">초대받은 이메일로 로그인하세요.</div>
     <form id="lf" class="card">
       <label class="f">이메일</label><input class="i" id="em" type="email" autocomplete="username" required value="${esc(PREF.get('cso_email')||'')}">
       <label class="f">비밀번호</label><input class="i" id="pw" type="password" autocomplete="current-password" required>
@@ -245,7 +245,7 @@ function viewDash(){
   const sum = (f)=> list.reduce((a,c)=>a+Number(f(c)||0),0);
   const cnt = (k)=> list.filter(c=>c._s.k===k).length;
   const owners = [...new Map(S.summary.map(c=>[c.owner_id, c.owner_name||'(이름 없음)'])).entries()];
-  app.innerHTML = header('미수금 현황판') + `<div class="wrap">
+  app.innerHTML = header('회전일 차트') + `<div class="wrap">
     <div class="tools">
       <label class="muted" style="align-self:center">기준일</label>
       <input class="i" type="date" id="base" value="${S.base}" style="max-width:170px">
@@ -531,7 +531,7 @@ async function start(){
     await loadMe();
     if(!S.me){ viewName(); return; }
     await loadSummary(); S.view='dash'; viewDash();
-  }catch(e){ app.innerHTML = header('미수금 현황판') + `<div class="wrap"><div class="card err">${esc(errMsg(e))}</div></div>`; }
+  }catch(e){ app.innerHTML = header('회전일 차트') + `<div class="wrap"><div class="card err">${esc(errMsg(e))}</div></div>`; }
 }
 sb.auth.onAuthStateChange((ev, session)=>{
   if(ev==='PASSWORD_RECOVERY') S.setPw = true;
