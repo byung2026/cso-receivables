@@ -427,7 +427,7 @@ async function viewDetail(){
     const {error} = await sb.from('customers').update({owner_id: ev.target.value}).eq('id', c.customer_id);
     if(error) toast(errMsg(error)); else { toast('담당자를 변경했습니다.'); await refresh(true); }
   }; }
-  S.entryCustName = c.customer_name;
+  S.entryCustName = custLabel(c);
 }
 function addMonths(s,n){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 async function viewPhoto(id){
@@ -444,7 +444,20 @@ async function delCustomer(){ const c=S.summary.find(x=>x.customer_id===S.custId
   const {error}=await sb.from('customers').delete().eq('id',S.custId); if(error) toast(errMsg(error)); else { toast('삭제했습니다.'); go('dash'); } }
 
 // ===== 거래 입력 =====
-function custOptions(){ return S.summary.filter(c=>!S.isAdmin || c.owner_id===S.session.user.id).map(c=>`<option value="${esc(c.customer_name)}">`).join(''); }
+// 관리자가 직원 거래처에 입력할 때는 '병원명 (담당: 직원)'으로 구분 (직원 화면에는 본인 거래처만 있으므로 해당 없음)
+const isOther = c=> S.isAdmin && c.owner_id!==S.session.user.id;
+const custLabel = c=> isOther(c) ? `${c.customer_name} (담당: ${c.owner_name||'-'})` : c.customer_name;
+function custOptions(){
+  const me=S.session.user.id, mineNames=new Set(S.summary.filter(c=>c.owner_id===me).map(c=>c.customer_name));
+  return S.summary.filter(c=>!isOther(c) || !mineNames.has(c.customer_name)).map(c=>`<option value="${esc(custLabel(c))}">`).join('');
+}
+// 입력 칸 글자 → 거래처 (본인 거래처 이름, 또는 관리자만 '병원명 (담당: 직원)')
+function findCust(text){
+  const t=(text||'').trim(); if(!t) return null; const me=S.session.user.id;
+  return S.summary.find(c=>c.owner_id===me && c.customer_name===t) || (S.isAdmin ? S.summary.find(c=>isOther(c) && custLabel(c)===t) : null) || null;
+}
+function custHint(c, bal){ if(!c) return '';
+  return isOther(c) ? `${c.owner_name||'-'}님 거래처입니다.${bal!=null?` 지금 잔액 ${won(bal)}원에 이어서 계산합니다.`:''}` : (bal!=null?`기존 거래처입니다. 지금 잔액 ${won(bal)}원에 이어서 계산합니다.`:''); }
 // keep=true: 거래처 상세에서 누른 경우만 그 거래처 이름을 미리 채움. 첫 화면에서는 항상 빈칸
 function openEntry(keep){ pushNav({v:'entry', keep:!!keep}); if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); }
 function viewEntry(msg, ok){
@@ -453,6 +466,7 @@ function viewEntry(msg, ok){
     <input class="i" id="cn" list="cl" value="${esc(S.entryCustName)}" required placeholder="병원이름"><datalist id="cl">${custOptions()}</datalist>
     <label class="f">구분</label>
     <div class="seg" id="kd">${['판매','수금','이월','반품'].map((k,i)=>`<button type="button" data-k="${k}" class="${i===0?'on':''}">${k}</button>`).join('')}</div>
+    <div id="cnh" class="muted" style="margin-top:6px"></div>
     <div class="pair"><div><label class="f">일자 <span id="dh" class="muted"></span></label><input class="i" id="dt" type="date" value="${todayStr()}"></div>
       <div><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="0"></div></div>
     <label class="f">품목 / 적요 (선택)</label><input class="i" id="it" placeholder="예: 하이알포르테주">
@@ -470,6 +484,8 @@ function viewEntry(msg, ok){
   it.addEventListener('input', ()=>{ delete it.dataset.auto; });
   const fmt = el=>el.oninput=()=>{ const v=el.value.replace(/[^0-9]/g,''); el.value=v?Number(v).toLocaleString('ko-KR'):''; };
   fmt(am); fmt(lb);
+  const hint=()=>{ cnh.textContent = (()=>{ const c=findCust(cn.value); return c&&isOther(c)?custHint(c):''; })(); };
+  cn.oninput=hint; hint();
   ef.onsubmit = async e=>{
     e.preventDefault(); const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
     const amt = Number(am.value.replace(/[^0-9]/g,'')); const name = cn.value.trim();
@@ -484,13 +500,13 @@ function viewEntry(msg, ok){
       S.entryCustName = ''; // 저장 후 다음 입력은 거래처 칸을 비워서 시작
       const chk = await ledgerCheck(cid, row.ledger_balance);
       await refresh(false);
-      viewEntry(`${name}: 저장했습니다. ${chk}`, !/불일치/.test(chk));
+      viewEntry(`${name.replace(/ \(담당: .*\)$/,'')}: 저장했습니다. ${chk}`, !/불일치/.test(chk));
     }catch(er){ out.className='err'; out.textContent=errMsg(er); }
   };
 }
 async function customerIdFor(name){
-  const mine = S.summary.find(c=>c.customer_name===name && c.owner_id===S.session.user.id);
-  if(mine) return mine.customer_id;
+  const found = findCust(name); // 관리자가 '병원명 (담당: 직원)'을 고르면 그 직원 거래처에 저장 (담당자는 그대로)
+  if(found) return found.customer_id;
   const {data, error} = await sb.rpc('ensure_customer', {p_name:name}); if(error) throw error; return data;
 }
 async function ledgerCheck(cid, lbv){
@@ -621,13 +637,13 @@ function paintStatus(){
 }
 function renderRows(){ document.getElementById('rows').innerHTML = S.rows.map(rowHtml).join(''); paintStatus(); }
 async function loadStartBal(){
-  const name=pc.value.trim(); const ex = S.summary.find(c=>c.customer_name===name && c.owner_id===S.session.user.id);
+  const name=pc.value.trim(); const ex = findCust(name);
   S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existKeys=new Set();
   if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id);
     (data||[]).forEach(e=>S.existKeys.add(entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount)));
     const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
   if(markExisting()) renderRows(); // 표시가 바뀐 줄이 있을 때만 다시 그림 (입력 중인 칸 보호)
-  document.getElementById('mstart').textContent = ex ? `기존 거래처입니다. 지금 잔액 ${won(S.startBal)}원에 이어서 계산합니다.` : (name?'새 거래처로 만들어집니다.':'');
+  document.getElementById('mstart').textContent = ex ? custHint(ex, S.startBal) : (name?'새 거래처로 만들어집니다.':'');
   paintStatus();
 }
 function viewPaste(){
