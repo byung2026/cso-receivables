@@ -408,7 +408,7 @@ async function viewDetail(){
           <span class="grow">📷 ${md(up)} 올림 <span class="muted">· ${p.purged_at?'삭제됨':`${md(del)} 삭제 예정`}</span></span>
           ${p.purged_at?'<span class="muted">보관 기간 지남</span>':`<button class="btn sm sec" onclick="viewPhoto('${p.id}')">보기</button>`}</div>`;}).join('')}
     </div>`:''}
-    <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><button class="btn sm" onclick="openEntry(true)">+ 거래 입력</button></div>
+    <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm sec" onclick="openPaste(true,true)">📷 사진</button><button class="btn sm sec" onclick="openPaste(false,true)">여러 줄</button><button class="btn sm" onclick="openEntry(true)">+ 거래 입력</button></div></div>
       <div style="margin-top:8px">
       ${[...entries].reverse().map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; /* 잔액은 오래된 순으로 계산, 표시는 최근 순 */ const amt=isPay?e.pay_amount:e.sale_amount;
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
@@ -502,9 +502,9 @@ async function ledgerCheck(cid, lbv){
 
 // ===== 여러 줄 입력 (표로 입력 · 📷 사진 · 엑셀 붙여넣기) =====
 const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item:'', lb:null, flag:'', skip:false});
-function openPaste(photo){
-  pushNav({v:'paste', photo:!!photo});
-  S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[];
+function openPaste(photo, keep){
+  pushNav({v:'paste', photo:!!photo, keep:!!keep});
+  if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[];
   S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existKeys=new Set();
   viewPaste();
 }
@@ -645,6 +645,7 @@ function viewPaste(){
   </div>`;
   renderRows();
   pc.onchange = loadStartBal; pc.oninput = paintStatus;
+  if(pc.value) loadStartBal(); // 상세 화면에서 열면 거래처가 미리 채워짐
   const box = document.getElementById('rows');
   box.addEventListener('input', e=>{
     const el=e.target, f=el.dataset.f; if(!f) return; const i=+el.closest('.mrow').dataset.i; const r=S.rows[i];
@@ -791,7 +792,7 @@ window.addEventListener('popstate', async e=>{
   try{
     if(st.v==='detail') await openCust(st.id);
     else if(st.v==='entry') openEntry(st.keep);
-    else if(st.v==='paste') openPaste(st.photo);
+    else if(st.v==='paste') openPaste(st.photo, st.keep);
     else if(st.v==='team') await openTeam();
     else if(st.v==='docs') openDocs();
     else { S.view='dash'; await refresh(true); }
