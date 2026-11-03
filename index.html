@@ -505,7 +505,7 @@ const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item
 function openPaste(photo){
   pushNav({v:'paste', photo:!!photo});
   S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[];
-  S.rows=[blankRow()]; S.startBal=0; S.startCust=null;
+  S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existKeys=new Set();
   viewPaste();
 }
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
@@ -535,10 +535,11 @@ async function readPhotos(files, onStatus){
     if(!name && data.customer_name) name=data.customer_name;
     all.push(...data.rows.map(r=>({...r, _photo:n, _model:data.model})));
   }
-  // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액·잔액 동일)은 중복 의심 → 기본 '저장 안 함'
+  // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액 같고, 잔액이 있으면 잔액도 같음)은 중복 의심 → 기본 '저장 안 함'
+  //  주문현황·수금현황처럼 잔액 칸이 없는 화면도 날짜·구분·금액으로 잡아냄 (같은 사진 안의 같은 줄은 중복으로 보지 않음)
   const firstPhoto = {};
-  const rows = all.map(r=>{ const key=[r.date,r.kind,r.amount,r.balance].join('|');
-    const dup = r.balance!=null && firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
+  const rows = all.map(r=>{ const key=[r.date,r.kind,r.amount,r.balance??''].join('|');
+    const dup = firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
     if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
     const flag = dup?'dup': r.unclear?'unc':'';
     return {date:r.date||null, kind:r.kind||'판매', amt:r.amount||null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag}; });
@@ -559,6 +560,15 @@ function parsePaste(txt){
   });
 }
 const isBlank = r => !r.amt && !r.item && r.lb==null;
+const entryKey = (d,k,a)=> [d||'', k, Number(a)||0].join('|');
+// 이 거래처에 이미 저장된 거래와 날짜·구분·금액이 같은 줄 → '이미 저장된 거래'로 표시하고 기본 '저장 안 함'
+function markExisting(){
+  const ex = S.existKeys||new Set(); let changed=false;
+  S.rows.forEach(r=>{ if(isBlank(r)) return;
+    if(ex.has(entryKey(r.date, r.kind, r.amt))){ if(r.flag!=='exist'){ r.flag='exist'; r.skip=true; changed=true; } }
+    else if(r.flag==='exist'){ r.flag=''; r.skip=false; changed=true; } });
+  return changed;
+}
 const isCredit = k => k==='수금' || k==='반품';
 function rowError(r){
   if(r.skip) return '';
@@ -583,7 +593,7 @@ function rowHtml(r,i){
   const fmt = v => v==null||v===''?'':Number(v).toLocaleString('ko-KR');
   return `<div class="mrow" data-i="${i}">
     <div class="mhead"><b>${i+1}</b>
-      ${r.flag==='dup'||r.flag==='unc'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':'사진 글자가 흐림'})</span></label>`:''}
+      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':'사진 글자가 흐림'})</span></label>`:''}
       <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
     <div class="mgrid">
       <label>일자<input class="i" type="date" data-f="date" value="${r.date||''}"></label>
@@ -612,9 +622,11 @@ function paintStatus(){
 function renderRows(){ document.getElementById('rows').innerHTML = S.rows.map(rowHtml).join(''); paintStatus(); }
 async function loadStartBal(){
   const name=pc.value.trim(); const ex = S.summary.find(c=>c.customer_name===name && c.owner_id===S.session.user.id);
-  S.startBal=0; S.startCust=ex?ex.customer_id:null;
+  S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existKeys=new Set();
   if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id);
+    (data||[]).forEach(e=>S.existKeys.add(entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount)));
     const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
+  if(markExisting()) renderRows(); // 표시가 바뀐 줄이 있을 때만 다시 그림 (입력 중인 칸 보호)
   document.getElementById('mstart').textContent = ex ? `기존 거래처입니다. 지금 잔액 ${won(S.startBal)}원에 이어서 계산합니다.` : (name?'새 거래처로 만들어집니다.':'');
   paintStatus();
 }
@@ -656,7 +668,7 @@ function viewPaste(){
     const t=(e.clipboardData||window.clipboardData)?.getData('text')||''; if(!/[\t\n]/.test(t.trim())) return;
     e.preventDefault(); const add=parsePaste(t); if(!add.length) return;
     while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
-    S.rows.push(...add); renderRows(); toast(`${add.length}줄을 채웠습니다.`);
+    S.rows.push(...add); markExisting(); renderRows(); toast(`${add.length}줄을 채웠습니다.`);
   });
   addRow.onclick = ()=>{ const last=S.rows[S.rows.length-1]; S.rows.push(blankRow(last&&last.date)); renderRows();
     const els=document.querySelectorAll('#rows .mrow'); els[els.length-1].scrollIntoView({block:'center'}); };
@@ -668,7 +680,7 @@ function viewPaste(){
       if(!pc.value.trim() && r.name){ pc.value=r.name; await loadStartBal(); }
       while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
       S.rows.push(...r.rows); if(!S.rows.length) S.rows.push(blankRow());
-      S.photoMode=true; renderRows();
+      S.photoMode=true; markExisting(); renderRows();
       st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 빨간 줄만 사진과 대조해서 고치세요.`;
     }catch(e){ st.className='err'; st.textContent='사진 읽기 실패: '+errMsg(e); }
   };
