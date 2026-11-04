@@ -91,6 +91,12 @@ table.t td{white-space:nowrap} table.t td.it{white-space:normal;min-width:90px;w
 .ent .l2 .sp{flex:1}
 table.t td.n,table.t th.n{text-align:right;font-variant-numeric:tabular-nums;white-space:nowrap}
 .scroll{overflow-x:auto;-webkit-overflow-scrolling:touch}
+/* 주문발생 표: 가로 스크롤 없이 품목만 줄바꿈 (fixed 레이아웃 + break-word → iOS Safari·Android Chrome 공통) */
+table.t.ord{table-layout:fixed}
+table.t.ord td.it{white-space:normal;min-width:0;word-break:keep-all;overflow-wrap:break-word;word-wrap:break-word}
+table.t.ord col.c-d{width:66px} table.t.ord col.c-r{width:86px} table.t.ord col.c-a{width:44px} table.t.ord col.c-m{width:66px}
+@media (max-width:440px){table.t.ord col.c-d{width:60px} table.t.ord col.c-r{width:76px} table.t.ord col.c-a{width:40px} table.t.ord col.c-m{width:58px}}
+@media (max-width:380px){table.t.ord th,table.t.ord td{padding:7px 3px;font-size:12px} table.t.ord col.c-d{width:54px} table.t.ord col.c-r{width:74px} table.t.ord col.c-a{width:36px} table.t.ord col.c-m{width:52px}}
 tr.pend td{background:var(--ylw-bg)} tr.bad td{background:var(--red-bg)}
 .buckets{display:grid;grid-template-columns:repeat(4,1fr);gap:8px}
 .bk{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
@@ -449,9 +455,9 @@ function ordersHtml(){
   const head = S.detBucket ? `<div class="row" style="margin-bottom:8px"><span class="grow"><b>${esc(S.detBucketLbl)}</b> 구간 ${items.length}건 · ${won(items.reduce((t,i)=>t+Number(i.remaining),0))}원</span><button class="btn sm sec" onclick="clearBucket()">전체 보기</button></div>` : '';
   if(!all.length) return '<div class="muted">남은 채권이 없습니다.</div>';
   const shown = items.slice(0, S.ordN);
-  return head + (items.length?`<div class="scroll"><table class="t"><tr><th>발생일</th><th>품목</th><th class="n">잔여</th><th class="n">경과</th><th>주문마감</th></tr>
+  return head + (items.length?`<table class="t ord"><colgroup><col class="c-d"><col><col class="c-r"><col class="c-a"><col class="c-m"></colgroup><tr><th>발생일</th><th>품목</th><th class="n">잔여</th><th class="n">경과</th><th>마감</th></tr>
       ${shown.map(i=>`<tr><td>${i.entry_date?md(i.entry_date):'미상'}</td><td class="it">${esc(i.item||i.kind)}</td><td class="n">${won(i.remaining)}</td><td class="n">${i.age_days??'-'}${i.age_days!=null?'일':''}</td>
-        <td>${i.entry_date? md(addDays(i.entry_date, blockDays()-1)):'-'}</td></tr>`).join('')}</table></div>${moreBtn(items.length-shown.length,'moreOrd()')}`:'<div class="muted">이 구간의 주문이 없습니다.</div>');
+        <td>${i.entry_date? md(addDays(i.entry_date, blockDays()-1)):'-'}</td></tr>`).join('')}</table>${moreBtn(items.length-shown.length,'moreOrd()')}`:'<div class="muted">이 구간의 주문이 없습니다.</div>');
 }
 function clearBucket(){ S.detBucket=null; S.ordN=PAGE; document.querySelectorAll('.bk').forEach(x=>x.classList.remove('sel')); document.getElementById('ordBody').innerHTML = ordersHtml(); }
 function addMonths(s,n){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
