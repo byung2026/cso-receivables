@@ -96,6 +96,8 @@ tr.pend td{background:var(--ylw-bg)} tr.bad td{background:var(--red-bg)}
 .bk{border:1px solid var(--line);border-radius:10px;padding:8px 10px}
 .bk .k{font-size:12px;color:var(--sub)} .bk .v{font-weight:700;font-variant-numeric:tabular-nums}
 .bk.hot{border-color:#f1b8b3;background:var(--red-bg)}
+.more{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:8px 0;border:0;background:none;color:var(--sub);font-size:14px;cursor:pointer}
+.more::before,.more::after{content:"";flex:1;border-top:1px solid var(--line)}
 .bk.tap{cursor:pointer} .bk.tap:active{transform:scale(.98)} .bk.sel{border:2px solid var(--navy,#1e3a6e);padding:7px 9px;background:#eef3fb}
 button.bk{display:block;width:100%;text-align:left;background:#fff;font:inherit;color:inherit;cursor:pointer}
 button.bk.hot{background:var(--red-bg)}
@@ -436,7 +438,7 @@ function entsHtml(){ // 거래 내역: 최근 10건씩
           <button class="btn sm danger" onclick="delEntry('${e.id}')">삭제</button></div></div>`;}).join('') + moreBtn(all.length-list.length, 'moreEnt()');
 }
 const PAGE=10;
-const moreBtn=(left, fn)=> left>0 ? `<button class="btn sec" style="width:100%;margin-top:10px" onclick="${fn}">더 보기 (남은 ${left}건)</button>` : '';
+const moreBtn=(left, fn)=> left>0 ? `<button type="button" class="more" onclick="${fn}">더 보기</button>` : '';
 function moreEnt(){ S.entN+=PAGE; document.getElementById('entBody').innerHTML=entsHtml(); }
 function moreOrd(){ S.ordN+=PAGE; document.getElementById('ordBody').innerHTML=ordersHtml(); }
 // 남은 채권의 회전일 구간 (customer_summary의 d30~d180·over_block·undated_remaining과 같은 기준)
