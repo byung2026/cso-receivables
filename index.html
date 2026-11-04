@@ -111,7 +111,7 @@ h3{font-size:15px;margin:0 0 8px}
 .kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:14px}
 .kv div:nth-child(odd){color:var(--sub)}
 .mrow{background:#fff;border:1px solid var(--line);border-left:5px solid #cdd6e1;border-radius:12px;padding:10px 12px;margin:10px 0}
-.mrow.ok{border-left-color:var(--grn)} .mrow.mis{border-left-color:var(--org);background:#fffaf2} .mrow.err{border-left-color:var(--red);background:var(--red-bg)} .mrow.skip{opacity:.55}
+.mrow.ok{border-left-color:var(--grn)} .mrow.mis{border-left-color:var(--org);background:#fffaf2} .mrow.err{border-left-color:var(--red);background:var(--red-bg)} .mrow.skip{opacity:.55} .mrow.zero{border-left-color:#9aa3af} .mrow.zero .mst{color:var(--sub)}
 .mhead{display:flex;align-items:center;gap:10px;margin-bottom:6px}
 .mskip{display:flex;align-items:center;gap:6px;font-size:13px}
 .mdel{border:0;background:none;font-size:18px;cursor:pointer;padding:2px 4px}
@@ -488,8 +488,9 @@ function viewEntry(msg, ok){
   cn.oninput=hint; hint();
   ef.onsubmit = async e=>{
     e.preventDefault(); const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
-    const amt = Number(am.value.replace(/[^0-9]/g,'')); const name = cn.value.trim();
-    if(!amt){ out.className='err'; out.textContent='금액을 입력하세요.'; return; }
+    const amtTxt = am.value.replace(/[^0-9]/g,''); const amt = Number(amtTxt); const name = cn.value.trim();
+    if(amtTxt===''){ out.className='err'; out.textContent='금액을 입력하세요.'; return; }
+    if(!amt && kind!=='판매'){ out.className='err'; out.textContent='0원은 판매(첨부·무상 품목)만 저장할 수 있습니다.'; return; }
     if(kind!=='이월' && !dt.value){ out.className='err'; out.textContent='일자를 입력하세요.'; return; }
     try{
       const cid = await customerIdFor(name);
@@ -558,7 +559,7 @@ async function readPhotos(files, onStatus){
     const dup = firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
     if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
     const flag = dup?'dup': r.unclear?'unc':'';
-    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount||null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag}; });
+    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag}; });
   return {name, rows, models:[...new Set(all.map(r=>r._model))]};
 }
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품'};
@@ -590,7 +591,8 @@ function rowError(r){
   if(r.skip) return '';
   if(r.flag==='date') return '날짜를 다시 골라주세요';
   if(!r.date && r.kind!=='이월') return '일자를 넣어주세요';
-  if(!r.amt) return '금액을 넣어주세요';
+  if(r.amt==null) return '금액을 넣어주세요';
+  if(r.amt===0 && r.kind!=='판매') return '금액을 넣어주세요'; // 0원은 판매(첨부·무상 품목)만 허용
   return '';
 }
 // 줄마다 계산 잔액·대조 결과 (저장 안 함·빈 줄 제외)
@@ -601,6 +603,7 @@ function evalRows(){
     if(r.skip) return {state:'skip'};
     const err = rowError(r); if(err) return {state:'err', msg:err};
     rb += isCredit(r.kind) ? -r.amt : r.amt;
+    if(r.amt===0 && (r.lb==null || r.lb===rb)) return {state:'ok', zero:true, rb, msg:`0원 품목 (첨부·무상) · 잔액 변동 없음${r.lb!=null?' ✓':''}`};
     if(r.lb==null) return {state:'ok', rb, msg:`계산 잔액 ${won(rb)}`};
     return r.lb===rb ? {state:'ok', rb, msg:`거래장 잔액과 일치 ✓`} : {state:'mis', rb, msg:`불일치 ⚠ 계산 ${won(rb)} / 거래장 ${won(r.lb)}`};
   });
@@ -625,7 +628,7 @@ function paintStatus(){
   const ev = evalRows(); let save=0, bad=0, skip=0;
   document.querySelectorAll('#rows .mrow').forEach(el=>{
     const e = ev[+el.dataset.i]; const st = el.querySelector('[data-st]');
-    el.classList.remove('ok','mis','err','skip');
+    el.classList.remove('ok','mis','err','skip','zero'); if(e.zero) el.classList.add('zero');
     if(e.state==='blank'){ st.textContent=''; return; }
     el.classList.add(e.state); st.textContent = e.state==='skip' ? '저장하지 않습니다' : e.msg;
     if(e.state==='ok') save++; else if(e.state==='mis'){ save++; bad++; } else if(e.state==='err') bad++; else skip++;
