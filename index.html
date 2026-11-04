@@ -380,7 +380,7 @@ async function viewDetail(){
   const err = en.error||fi.error; if(err){ app.innerHTML = header(c.customer_name,true)+`<div class="wrap"><div class="err">${esc(errMsg(err))}</div></div>`; return; }
   const entries = runCheck((en.data||[]).sort(sortEntries));
   const items = (fi.data||[]).filter(x=>x.customer_id===c.customer_id && Number(x.remaining)>0).sort((a,b)=>(a.entry_date||'')<(b.entry_date||'')?-1:1);
-  S.detItems = items; S.detBucket = null;
+  S.detItems = items; S.detBucket = null; S.detEntries = entries; S.ordN = PAGE; S.entN = PAGE;
   const s=c._s; const bd = (k,lbl,hot)=>`<div class="bk ${hot&&Number(c[k])>0?'hot':''} ${Number(c[k])>0?'tap':''}" data-bk="${k}" data-lbl="${lbl.replace(/ \(.*/,'')}"><div class="k">${lbl}</div><div class="v">${won(c[k])}</div></div>`;
   app.innerHTML = header(c.customer_name, true) + `<div class="wrap">
     <div class="card">
@@ -406,16 +406,7 @@ async function viewDetail(){
           ${p.purged_at?'<span class="muted">보관 기간 지남</span>':`<button class="btn sm sec" onclick="viewPhoto('${p.id}')">보기</button>`}</div>`;}).join('')}
     </div>`:''}
     <div class="card"><div class="row"><h3 class="grow" style="margin:0">거래 내역</h3><div class="row" style="gap:6px;flex-wrap:wrap;justify-content:flex-end"><button class="btn sm sec" onclick="openPaste(true,true)">📷 사진</button><button class="btn sm sec" onclick="openPaste(false,true)">여러 줄</button><button class="btn sm" onclick="openEntry(true)">+ 거래 입력</button></div></div>
-      <div style="margin-top:8px">
-      ${[...entries].reverse().map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; /* 잔액은 오래된 순으로 계산, 표시는 최근 순 */ const amt=isPay?e.pay_amount:e.sale_amount;
-        return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
-        <div class="l1"><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span><span class="kd">${e.kind}</span>${e.photo_id&&S.photoMap[e.photo_id]&&!S.photoMap[e.photo_id].purged_at?`<span title="사진으로 입력" style="cursor:pointer" onclick="viewPhoto('${e.photo_id}')">📷</span>`:''}
-          <span class="it">${esc(e.item||'')}</span><span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span></div>
-        <div class="l2"><span>계산 ${e._rb!=null?won(e._rb):'-'}</span>${e.ledger_balance!=null?`<span>거래장 ${won(e.ledger_balance)} ${e._mis?'<b style="color:var(--red)">불일치 ⚠</b>':'✓'}</span>`:''}
-          <span class="sp"></span>
-          ${e.status==='확인대기'?`<button class="btn sm sec" onclick="confirmEntry('${e.id}')">확정</button>`:''}
-          <button class="btn sm danger" onclick="delEntry('${e.id}')">삭제</button></div></div>`;}).join('')}
-      </div>
+      <div style="margin-top:8px" id="entBody">${entsHtml()}</div>
       ${entries.some(e=>e._mis)?'<div class="err">⚠ 거래장 잔액과 계산 잔액이 다른 행이 있습니다. 빠진 거래나 금액 오타를 확인하세요.</div>':''}
     </div>
     <div style="text-align:right"><button class="btn sm danger" onclick="delCustomer()">거래처 삭제</button></div>
@@ -427,12 +418,27 @@ async function viewDetail(){
   S.entryCustName = custLabel(c);
   // 회전일 칸을 누르면 그 구간의 주문만 보기 (다시 누르면 전체)
   document.querySelectorAll('.bk.tap').forEach(el=>el.onclick=()=>{
-    S.detBucket = S.detBucket===el.dataset.bk ? null : el.dataset.bk; S.detBucketLbl = el.dataset.lbl;
+    S.detBucket = S.detBucket===el.dataset.bk ? null : el.dataset.bk; S.detBucketLbl = el.dataset.lbl; S.ordN = PAGE;
     document.querySelectorAll('.bk').forEach(x=>x.classList.toggle('sel', x.dataset.bk===S.detBucket));
     document.getElementById('ordBody').innerHTML = ordersHtml();
     if(S.detBucket) document.getElementById('ordCard').scrollIntoView({behavior:'smooth', block:'start'});
   });
 }
+function entsHtml(){ // 거래 내역: 최근 10건씩
+  const all=[...(S.detEntries||[])].reverse(); const list=all.slice(0, S.entN);
+  return list.map(e=>{ const isPay=e.kind==='수금'||e.kind==='반품'; /* 잔액은 오래된 순으로 계산, 표시는 최근 순 */ const amt=isPay?e.pay_amount:e.sale_amount;
+        return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
+        <div class="l1"><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span><span class="kd">${e.kind}</span>${e.photo_id&&S.photoMap[e.photo_id]&&!S.photoMap[e.photo_id].purged_at?`<span title="사진으로 입력" style="cursor:pointer" onclick="viewPhoto('${e.photo_id}')">📷</span>`:''}
+          <span class="it">${esc(e.item||'')}</span><span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span></div>
+        <div class="l2"><span>계산 ${e._rb!=null?won(e._rb):'-'}</span>${e.ledger_balance!=null?`<span>거래장 ${won(e.ledger_balance)} ${e._mis?'<b style="color:var(--red)">불일치 ⚠</b>':'✓'}</span>`:''}
+          <span class="sp"></span>
+          ${e.status==='확인대기'?`<button class="btn sm sec" onclick="confirmEntry('${e.id}')">확정</button>`:''}
+          <button class="btn sm danger" onclick="delEntry('${e.id}')">삭제</button></div></div>`;}).join('') + moreBtn(all.length-list.length, 'moreEnt()');
+}
+const PAGE=10;
+const moreBtn=(left, fn)=> left>0 ? `<button class="btn sec" style="width:100%;margin-top:10px" onclick="${fn}">더 보기 (남은 ${left}건)</button>` : '';
+function moreEnt(){ S.entN+=PAGE; document.getElementById('entBody').innerHTML=entsHtml(); }
+function moreOrd(){ S.ordN+=PAGE; document.getElementById('ordBody').innerHTML=ordersHtml(); }
 // 남은 채권의 회전일 구간 (customer_summary의 d30~d180·over_block·undated_remaining과 같은 기준)
 function bucketKey(i){ const a=i.age_days; if(a==null) return 'undated_remaining'; if(a>=blockDays()) return 'over_block';
   return a<=30?'d30':a<=60?'d60':a<=90?'d90':a<=120?'d120':a<=150?'d150':'d180'; }
@@ -440,11 +446,12 @@ function ordersHtml(){
   const all=S.detItems||[]; const items = S.detBucket ? all.filter(i=>bucketKey(i)===S.detBucket) : all;
   const head = S.detBucket ? `<div class="row" style="margin-bottom:8px"><span class="grow"><b>${esc(S.detBucketLbl)}</b> 구간 ${items.length}건 · ${won(items.reduce((t,i)=>t+Number(i.remaining),0))}원</span><button class="btn sm sec" onclick="clearBucket()">전체 보기</button></div>` : '';
   if(!all.length) return '<div class="muted">남은 채권이 없습니다.</div>';
+  const shown = items.slice(0, S.ordN);
   return head + (items.length?`<div class="scroll"><table class="t"><tr><th>발생일</th><th>품목</th><th class="n">잔여</th><th class="n">경과</th><th>주문마감</th></tr>
-      ${items.map(i=>`<tr><td>${i.entry_date?md(i.entry_date):'미상'}</td><td class="it">${esc(i.item||i.kind)}</td><td class="n">${won(i.remaining)}</td><td class="n">${i.age_days??'-'}${i.age_days!=null?'일':''}</td>
-        <td>${i.entry_date? md(addDays(i.entry_date, blockDays()-1)):'-'}</td></tr>`).join('')}</table></div>`:'<div class="muted">이 구간의 주문이 없습니다.</div>');
+      ${shown.map(i=>`<tr><td>${i.entry_date?md(i.entry_date):'미상'}</td><td class="it">${esc(i.item||i.kind)}</td><td class="n">${won(i.remaining)}</td><td class="n">${i.age_days??'-'}${i.age_days!=null?'일':''}</td>
+        <td>${i.entry_date? md(addDays(i.entry_date, blockDays()-1)):'-'}</td></tr>`).join('')}</table></div>${moreBtn(items.length-shown.length,'moreOrd()')}`:'<div class="muted">이 구간의 주문이 없습니다.</div>');
 }
-function clearBucket(){ S.detBucket=null; document.querySelectorAll('.bk').forEach(x=>x.classList.remove('sel')); document.getElementById('ordBody').innerHTML = ordersHtml(); }
+function clearBucket(){ S.detBucket=null; S.ordN=PAGE; document.querySelectorAll('.bk').forEach(x=>x.classList.remove('sel')); document.getElementById('ordBody').innerHTML = ordersHtml(); }
 function addMonths(s,n){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 async function viewPhoto(id){
   const p=(S.photoMap||{})[id]; if(!p) return;
