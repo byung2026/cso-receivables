@@ -612,7 +612,11 @@ const entryKey = (d,k,a)=> [d||'', k, Number(a)||0].join('|');
 // 이 거래처에 이미 저장된 거래와 날짜·구분·금액이 같은 줄 → '이미 저장된 거래'로 표시하고 기본 '저장 안 함'
 function markExisting(){
   const ex = S.existKeys||new Set(); let changed=false;
+  const hasPrev = ex.size>0; // 이미 거래가 있는 거래처
   S.rows.forEach(r=>{ if(isBlank(r)) return;
+    // 기존 거래처에 새 거래장을 올리면 맨 위 '전기이월'은 이미 반영된 잔액 → 기본 '저장 안 함' (처음 등록하는 거래처는 그대로 저장)
+    if(r.kind==='이월' && hasPrev){ if(r.flag!=='carry'){ r.flag='carry'; r.skip=true; changed=true; } return; }
+    if(r.flag==='carry'){ r.flag=''; r.skip=false; changed=true; }
     if(ex.has(entryKey(r.date, r.kind, r.amt))){ if(r.flag!=='exist'){ r.flag='exist'; r.skip=true; changed=true; } }
     else if(r.flag==='exist'){ r.flag=''; r.skip=false; changed=true; } });
   return changed;
@@ -643,7 +647,7 @@ function rowHtml(r,i){
   const fmt = v => v==null||v===''?'':Number(v).toLocaleString('ko-KR');
   return `<div class="mrow" data-i="${i}">
     <div class="mhead"><b>${i+1}</b>
-      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':'사진 글자가 흐림'})</span></label>`:''}
+      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'||r.flag==='carry'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':r.flag==='carry'?'기존 거래처라 이월 제외':'사진 글자가 흐림'})</span></label>`:''}
       <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
     <div class="mgrid">
       <label>일자<input class="i" type="date" data-f="date" value="${r.date||''}"></label>
