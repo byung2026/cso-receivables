@@ -496,7 +496,7 @@ function viewEntry(msg, ok){
     <label class="f">거래처 (처음 입력하면 자동으로 생성됩니다)</label>
     <input class="i" id="cn" list="cl" value="${esc(S.entryCustName)}" required placeholder="병원이름"><datalist id="cl">${custOptions()}</datalist>
     <label class="f">구분</label>
-    <div class="seg" id="kd">${['판매','수금','이월','반품','할인'].map((k,i)=>`<button type="button" data-k="${k}" class="${i===0?'on':''}">${k}</button>`).join('')}</div>
+    <div class="seg" id="kd">${['판매','수금','이월','반품','매출할인'].map((k,i)=>`<button type="button" data-k="${k}" class="${i===0?'on':''}">${k}</button>`).join('')}</div>
     <div id="cnh" class="muted" style="margin-top:6px"></div>
     <div class="pair"><div><label class="f">일자 <span id="dh" class="muted"></span></label><input class="i" id="dt" type="date" value="${todayStr()}"></div>
       <div><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="0"></div></div>
@@ -504,7 +504,7 @@ function viewEntry(msg, ok){
     <label class="f">거래장 잔액 (선택 · 넣으면 자동 대조)</label><input class="i" id="lb" inputmode="numeric" placeholder="거래 후 잔액">
     <div style="margin-top:14px" class="row"><button class="btn grow">저장</button></div>
     <div id="em2" class="${ok?'ok':'err'}">${msg||''}</div>
-    <div class="muted" style="margin-top:10px">· 같은 거래처는 거래장 순서대로 입력하세요.<br>· 반품·할인(매출할인)은 수금처럼 가장 오래된 미수금부터 차감됩니다. 금액은 마이너스 없이 그대로 넣으세요.</div>
+    <div class="muted" style="margin-top:10px">· 같은 거래처는 거래장 순서대로 입력하세요.<br>· 반품·매출할인은 수금처럼 가장 오래된 미수금부터 차감됩니다. 금액은 마이너스 없이 그대로 넣으세요.</div>
   </form></div>`;
   let kind='판매';
   kd.querySelectorAll('button').forEach(b=>b.onclick=()=>{ kd.querySelectorAll('button').forEach(x=>x.classList.remove('on')); b.classList.add('on'); kind=b.dataset.k;
@@ -593,7 +593,7 @@ async function readPhotos(files, onStatus){
     return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag}; });
   return {name, rows, models:[...new Set(all.map(r=>r._model))]};
 }
-const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품','할인':'할인','매출할인':'할인'};
+const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품','할인':'매출할인','매출할인':'매출할인'};
 function parseDate(s){ s=(s||'').trim(); if(!s) return null; const m=s.replace(/[./년월]/g,'-').replace(/일/,'').match(/^(\d{2,4})-(\d{1,2})-(\d{1,2})/);
   if(!m) return undefined; let y=Number(m[1]); if(y<100) y+=2000; return `${y}-${String(m[2]).padStart(2,'0')}-${String(m[3]).padStart(2,'0')}`; }
 function num(s){ const v=String(s??'').replace(/[^0-9-]/g,''); return v===''||v==='-'?null:Number(v); }
@@ -603,7 +603,7 @@ function parsePaste(txt){
     const c = l.includes('\t')? l.split('\t') : l.split(/,(?![0-9]{3})/);
     let kind=KIND_MAP[(c[1]||'').replace(/\s/g,'')]||'판매';
     const d=parseDate(c[0]); let amt=num(c[2]);
-    if(amt!=null && amt<0){ if(kind==='판매') kind=/할인/.test(c[3]||'')?'할인':'반품'; amt=Math.abs(amt); } // 거래장의 마이너스 판매 = 반품
+    if(amt!=null && amt<0){ if(kind==='판매') kind=/할인/.test(c[3]||'')?'매출할인':'반품'; amt=Math.abs(amt); } // 거래장의 마이너스 판매 = 반품
     return {date: d||null, kind, amt, item:(c[3]||'').trim(), lb:num(c[4]), flag: d===undefined?'date':'', skip:false};
   });
 }
@@ -621,7 +621,7 @@ function markExisting(){
     else if(r.flag==='exist'){ r.flag=''; r.skip=false; changed=true; } });
   return changed;
 }
-function isCredit(k){ return k==='수금' || k==='반품' || k==='할인'; } // 가장 오래된 미수부터 차감
+function isCredit(k){ return k==='수금' || k==='반품' || k==='매출할인'; } // 가장 오래된 미수부터 차감
 function rowError(r){
   if(r.skip) return '';
   if(r.flag==='date') return '날짜를 다시 골라주세요';
@@ -651,7 +651,7 @@ function rowHtml(r,i){
       <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
     <div class="mgrid">
       <label>일자<input class="i" type="date" data-f="date" value="${r.date||''}"></label>
-      <label>구분<select class="i" data-f="kind">${['판매','수금','이월','반품','할인'].map(k=>`<option ${r.kind===k?'selected':''}>${k}</option>`).join('')}</select></label>
+      <label>구분<select class="i" data-f="kind">${['판매','수금','이월','반품','매출할인'].map(k=>`<option ${r.kind===k?'selected':''}>${k}</option>`).join('')}</select></label>
       <label>금액<input class="i" data-f="amt" inputmode="numeric" placeholder="0" value="${fmt(r.amt)}"></label>
       <label>거래장 잔액<input class="i" data-f="lb" inputmode="numeric" placeholder="선택" value="${fmt(r.lb)}"></label>
       <label class="span2">품목 / 적요<input class="i" data-f="item" placeholder="예: 하이알포르테주" value="${esc(r.item||'')}"></label>

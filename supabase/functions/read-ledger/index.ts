@@ -17,9 +17,9 @@ const PROMPT = `이 사진은 한국 의약품 도매/제약회사의 거래처 
 표의 거래 행을 위에서 아래 순서 그대로 모두 읽어 ledger 도구로 돌려주세요.
 
 규칙
-- kind: 매출·출고·판매 → "판매", 입금·수금 → "수금", 전기이월·전월이월·이월 → "이월", 반품 → "반품", 매출할인·할인 → "할인"
-- 금액이 마이너스(-)로 찍힌 판매 행은 반품입니다: kind "반품", amount는 양수로. (적요에 할인이라고 적힌 마이너스 행은 "할인")
-- 할인은 잔액을 줄이는 행입니다. 판매로 읽지 마세요.
+- kind: 매출·출고·판매 → "판매", 입금·수금 → "수금", 전기이월·전월이월·이월 → "이월", 반품 → "반품", 매출할인·할인 → "매출할인"
+- 금액이 마이너스(-)로 찍힌 판매 행은 반품입니다: kind "반품", amount는 양수로. (적요에 할인이라고 적힌 마이너스 행은 "매출할인")
+- 매출할인은 잔액을 줄이는 행입니다. 판매로 읽지 마세요.
 - amount: 그 행의 거래 총액(원, 부가세 포함 합계). 단가·수량이 아니라 금액/합계 칸의 값. 쉼표 없이 정수.
 - balance: 그 행 거래 후 잔액 칸의 값. 없으면 null.
 - date: YYYY-MM-DD. 연도가 생략됐으면 표의 다른 날짜·출력일로 추정. 이월 행에 날짜가 없으면 "".
@@ -42,7 +42,7 @@ const TOOL = {
           type: "object",
           properties: {
             date: { type: "string" },
-            kind: { type: "string", enum: ["이월", "판매", "수금", "반품", "할인"] },
+            kind: { type: "string", enum: ["이월", "판매", "수금", "반품", "매출할인"] },
             amount: { type: "integer" },
             item: { type: "string" },
             balance: { type: ["integer", "null"] },
@@ -99,7 +99,7 @@ async function readWith(model: string, key: string, b64: string, mediaType: stri
   const out = tu.input as { customer_name: string; rows: Row[]; notes?: string };
   out.rows = (out.rows ?? []).map((r) => {
     const a = Math.round(Number(r.amount) || 0);
-    const kind = a < 0 && r.kind === "판매" ? (/할인/.test(r.item ?? "") ? "할인" : "반품") : r.kind; // 마이너스 판매 = 반품(적요가 할인이면 할인)
+    const kind = a < 0 && r.kind === "판매" ? (/할인/.test(r.item ?? "") ? "매출할인" : "반품") : r.kind; // 마이너스 판매 = 반품(적요가 할인이면 매출할인)
     return { ...r, kind, amount: Math.abs(a) };
   });
   return { ...out, usage: body.usage };
