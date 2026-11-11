@@ -227,7 +227,7 @@ function lastInputHtml(c, long){
   const ago = dd(todayStr(), c.last_input); const old = ago > STALE_DAYS;
   const txt = `${long?c.last_input:md(c.last_input)} (${ago<=0?'오늘':ago+'일 전'})`;
   return long ? `<span style="${old?'color:#b54708;font-weight:700':''}">${txt}</span>`
-              : `<span style="${old?'color:#b54708':''}">최근 입력 <b style="${old?'color:#b54708':''}">${txt}</b></span>`;
+              : `<span style="flex-basis:100%;${old?'color:#b54708':''}">최근 입력 <b style="${old?'color:#b54708':''}">${txt}</b></span>`;
 }
 
 // ===== 화면: 공통 헤더 =====
