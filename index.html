@@ -324,6 +324,7 @@ function viewDash(){
       ${S.isAdmin?`<select class="i" id="own"><option value="all">전체 담당자</option>${owners.map(([id,n])=>`<option value="${id}" ${S.ownerFilter===id?'selected':''}>${esc(n)}</option>`).join('')}</select>`:''}
       <input class="i" id="q" placeholder="거래처 검색" value="${esc(S.q)}">
       ${S.isAdmin?`<button class="btn sec" style="flex:0 0 auto" onclick="openTeam()">👥 동료 관리</button><button class="btn sec" style="flex:0 0 auto" onclick="openDocs()">📘 설명서</button>`:''}
+      <button class="btn sec" style="flex:0 0 auto" onclick="askExport()">📥 엑셀</button>
     </div>
     <div class="stats">
       <div class="stat"><div class="k">총 미수금</div><div class="v">${won(sum(c=>c.balance))}</div></div>
@@ -797,6 +798,82 @@ function viewPaste(){
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash');
     }catch(er){ perr.textContent=errMsg(er); ps.disabled=false; }
   };
+}
+
+// ===== 엑셀 내려받기 (거래처 요약) =====
+// 관리자: 전체 / 담당자별로 골라서 받기. 동료: 본인 거래처만 (서버 권한상 본인 것만 불러와짐)
+const EXCELJS_URL = 'exceljs.min.js?v=4.4.0'; // ExcelJS 4.4.0 (MIT), 앱과 같은 곳에 올려 두고 누를 때만 불러옴
+function loadExcelJS(){ if(window.ExcelJS) return Promise.resolve();
+  return new Promise((ok, no)=>{ const sc=document.createElement('script'); sc.src=EXCELJS_URL; sc.onload=()=>ok(); sc.onerror=()=>no(new Error('엑셀 기능을 불러오지 못했습니다. 인터넷 연결을 확인하세요.')); document.head.appendChild(sc); }); }
+function askExport(){
+  if(!S.isAdmin){ doExport('me'); return; }
+  const owners=[...new Map(S.summary.map(c=>[c.owner_id, c.owner_name||'(이름 없음)'])).entries()]
+    .sort((a,b)=> (a[0]===S.session.user.id?-1:b[0]===S.session.user.id?1:a[1].localeCompare(b[1],'ko')));
+  const cur = S.ownerFilter || 'all';
+  const cnt = id => S.summary.filter(c=>id==='all'||c.owner_id===id).length;
+  const box=document.createElement('div'); box.id='xbox';
+  box.style.cssText='position:fixed;inset:0;background:rgba(15,23,42,.45);display:flex;align-items:flex-end;justify-content:center;z-index:50';
+  box.innerHTML=`<div class="card" style="width:100%;max-width:480px;margin:0;border-radius:16px 16px 0 0;padding-bottom:calc(18px + env(safe-area-inset-bottom))">
+    <h3>📥 엑셀로 받기 · 거래처 요약</h3><div class="muted">기준일 ${S.base} 기준으로 만듭니다.</div>
+    <div style="margin:12px 0;display:flex;flex-direction:column;gap:6px">
+      ${[['all','전체 담당자']].concat(owners).map(([id,n])=>`<label class="row" style="gap:8px;padding:8px 4px;cursor:pointer"><input type="radio" name="xo" value="${id}" ${id===cur?'checked':''} style="width:18px;height:18px"><span class="grow">${esc(n)}${id===S.session.user.id?' (나)':''}</span><span class="muted">${cnt(id)}처</span></label>`).join('')}
+    </div>
+    <div class="row" style="gap:8px"><button class="btn sec grow" onclick="document.getElementById('xbox').remove()">취소</button><button class="btn grow" id="xgo">내려받기</button></div></div>`;
+  box.onclick=e=>{ if(e.target===box) box.remove(); };
+  document.body.appendChild(box);
+  document.getElementById('xgo').onclick=()=>{ const v=box.querySelector('input[name=xo]:checked')?.value||'all'; box.remove(); doExport(v); };
+}
+async function doExport(who){
+  const me=S.session.user.id;
+  const list = sortList(S.summary.filter(c=> who==='all' ? true : who==='me' ? c.owner_id===me : c.owner_id===who)).filter(c=>c); // 정렬은 화면과 같게
+  if(!list.length){ toast('받을 거래처가 없습니다.'); return; }
+  const label = who==='all' ? '전체' : (list[0].owner_name||'담당자');
+  toast('엑셀 파일을 만드는 중...');
+  try{ await loadExcelJS(); }catch(e){ toast(e.message); return; }
+  const wb=new ExcelJS.Workbook(); const ws=wb.addWorksheet('거래처 요약', {views:[{state:'frozen', xSplit:1, ySplit:4, showGridLines:false}]});
+  const F={name:'맑은 고딕', size:10}; const thin={style:'thin', color:{argb:'FFD0D7E2'}}; const BOX={top:thin,left:thin,bottom:thin,right:thin};
+  const fill=c=>({type:'pattern', pattern:'solid', fgColor:{argb:c}}); const NUM='#,##0;-#,##0;"-"';
+  const toDate=s=> s? new Date(s+'T00:00:00Z') : null;
+  ws.getCell('A1').value='회전일 차트 · 거래처 요약'+(who==='all'?'':` (${label})`); ws.getCell('A1').font={...F, size:14, bold:true};
+  ws.getCell('A2').value=`기준일 ${S.base}  ·  회전일 = 가장 오래된 미수(선입선출) 경과일  ·  ${blockDays()}일부터 주문 차단`; ws.getCell('A2').font={...F, color:{argb:'FF5B6576'}};
+  const H=['거래처','담당자','판정','미수 잔액','회전일','30일\n(0~30)','60일\n(31~60)','90일\n(61~90)','120일\n(91~120)','150일\n(121~150)',`180일\n(151~${blockDays()-1})`,`${blockDays()}일↑\n(차단)`,'날짜 미상','마지막\n주문 가능일','차단 시작','최근 입력'];
+  const W=[16,12,10,13,11,12,12,12,12,12,12,12,10,12,12,12]; W.forEach((w,i)=>ws.getColumn(i+1).width=w);
+  const hr=ws.getRow(4); hr.height=32;
+  H.forEach((h,i)=>{ const c=hr.getCell(i+1); c.value=h; c.font={...F, bold:true, color:{argb:'FFFFFFFF'}}; c.fill=fill('FF1F3A6E'); c.alignment={horizontal:'center', vertical:'middle', wrapText:true}; c.border=BOX; });
+  const keys=['d30','d60','d90','d120','d150','d180','over_block','undated_remaining'];
+  list.forEach((c,k)=>{ const r=5+k, row=ws.getRow(r); const st=c._s;
+    const vals=[c.customer_name, c.owner_name||'', st.t, null, c.turnover_days, ...keys.map(x=>Number(c[x])||0), toDate(c.last_order_date), toDate(c.block_start_date), toDate(c.last_input)];
+    vals.forEach((v,i)=>{ const cell=row.getCell(i+1); cell.value=v; cell.font={...F}; cell.border=BOX; });
+    row.getCell(4).value={formula:`SUM(F${r}:M${r})`, result:Number(c.balance)||0};
+    for(let i=4;i<=13;i++) row.getCell(i).numFmt=NUM;
+    row.getCell(5).numFmt='0"일"'; row.getCell(3).alignment={horizontal:'center'};
+    [14,15,16].forEach(i=>{ row.getCell(i).numFmt='yyyy-mm-dd'; row.getCell(i).alignment={horizontal:'center'}; });
+    const bg = st.k==='block' ? 'FFFDE4E2' : st.k==='soon' ? 'FFFFF1DC' : null;
+    if(bg) for(let i=1;i<=H.length;i++) row.getCell(i).fill=fill(bg);
+    if(st.k==='block') row.getCell(3).font={...F, bold:true, color:{argb:'FFB42318'}};
+    if(c.last_input && dd(todayStr(), c.last_input) > STALE_DAYS) row.getCell(16).font={...F, bold:true, color:{argb:'FFB54708'}};
+  });
+  const last=4+list.length, t=last+1, tr=ws.getRow(t); const col=i=>String.fromCharCode(64+i);
+  const blocked=list.filter(c=>c._s.k==='block').length;
+  tr.getCell(1).value='합계';
+  tr.getCell(2).value={formula:`COUNTA(A5:A${last})&"처"`, result:`${list.length}처`};
+  tr.getCell(3).value={formula:`COUNTIF(C5:C${last},"주문 차단")&"처 차단"`, result:`${blocked}처 차단`};
+  for(let i=4;i<=13;i++){ if(i===5) continue; tr.getCell(i).value={formula:`SUM(${col(i)}5:${col(i)}${last})`, result:list.reduce((a,c)=>a+(Number(i===4?c.balance:c[keys[i-6]])||0),0)}; tr.getCell(i).numFmt=NUM; }
+  tr.getCell(5).value={formula:`MAX(E5:E${last})`, result:Math.max(0,...list.map(c=>Number(c.turnover_days)||0))}; tr.getCell(5).numFmt='"최장 "0"일"';
+  for(let i=1;i<=H.length;i++){ const c=tr.getCell(i); c.font={...F, bold:true}; c.fill=fill('FFE8EEF7'); c.border=BOX; }
+  ws.getCell(`A${t+2}`).value='색 표시: 빨강 = 주문 차단 · 주황 = 30일 안에 차단 · 최근 입력 주황 글씨 = 30일 넘게 입력 없음'; ws.getCell(`A${t+2}`).font={...F, color:{argb:'FF5B6576'}};
+  ws.getCell(`A${t+3}`).value=`${new Date().toLocaleString('ko-KR')} 회전일 차트에서 내려받음 · 금액은 거래장 기준(부가세 포함)`; ws.getCell(`A${t+3}`).font={...F, color:{argb:'FF5B6576'}};
+  ws.autoFilter={from:'A4', to:`P${last}`};
+  const buf=await wb.xlsx.writeBuffer();
+  const name=`회전일차트_거래처요약_${who==='all'?'전체':label}_${S.base}.xlsx`;
+  const blob=new Blob([buf], {type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  // 휴대폰에서 공유(카톡 등)할 수 있으면 공유 창, 아니면 바로 다운로드
+  const file = new File([blob], name, {type:blob.type});
+  if(navigator.canShare && /Android|iPhone|iPad/i.test(navigator.userAgent) && navigator.canShare({files:[file]})){
+    try{ await navigator.share({files:[file], title:name}); return; }catch(e){ if(e.name==='AbortError') return; }
+  }
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name; document.body.appendChild(a); a.click();
+  setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); }, 1500); toast('엑셀 파일을 받았습니다.');
 }
 
 // ===== 동료 관리 (관리자) =====
