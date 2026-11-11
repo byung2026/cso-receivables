@@ -338,7 +338,7 @@ function viewDash(){
     <div class="row" style="margin:14px 0 2px">
       <h3 class="grow" style="margin:0">거래처 <span class="muted" style="font-weight:400">${list.length}처</span></h3>
       <select class="i" id="srt" style="width:auto;flex:0 0 auto;padding:8px 10px" aria-label="정렬">
-        ${[['name','이름순'],['turnDesc','회전일 긴 순'],['turnAsc','회전일 짧은 순'],['inputOld','최근 입력 오래된 순']].map(([v,t])=>`<option value="${v}" ${(S.sort||'name')===v?'selected':''}>${t}</option>`).join('')}
+        ${[['name','이름순'],['turnDesc','회전일 긴 순'],['turnAsc','회전일 짧은 순'],['inputNew','최근 입력 순']].map(([v,t])=>`<option value="${v}" ${(S.sort||'name')===v?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>
     ${S.bucket?`<div class="row" style="margin:4px 0 0"><span class="chip c-warn">회전일 ${BK_LABEL[S.bucket]} 거래처 ${list.length}처만 보는 중</span>
@@ -365,13 +365,13 @@ function viewDash(){
   srt.onchange = ()=>{ S.sort = srt.value; viewDash(); };
 }
 
-// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 / 최근 입력 오래된 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
+// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 / 최근 입력 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
 function sortList(arr){
   const byName = (a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko');
   const t = c => Number(c.balance)>0 && c.turnover_days!=null ? Number(c.turnover_days) : null;
   const mode = S.sort || 'name';
   if(mode==='name') return [...arr].sort(byName);
-  if(mode==='inputOld') return [...arr].sort((a,b)=> (a.last_input||'').localeCompare(b.last_input||'') || byName(a,b)); // 입력 없는 거래처가 맨 위
+  if(mode==='inputNew') return [...arr].sort((a,b)=> (b.last_input||'').localeCompare(a.last_input||'') || byName(a,b)); // 최근에 입력한 거래처가 맨 위, 입력 없는 거래처는 맨 뒤
   return [...arr].sort((a,b)=>{ const x=t(a), y=t(b);
     if(x==null && y==null) return byName(a,b); if(x==null) return 1; if(y==null) return -1;
     return (mode==='turnDesc' ? y-x : x-y) || byName(a,b); });
