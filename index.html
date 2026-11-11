@@ -212,10 +212,22 @@ async function loadMe(){
   if(S.isAdmin){ const {data} = await sb.from('members').select('*').order('display_name'); S.members = data || []; }
 }
 async function loadSummary(){
-  const {data, error} = await sb.rpc('customer_summary', {p_base: S.base});
+  const [{data, error}, {data:li}] = await Promise.all([sb.rpc('customer_summary', {p_base: S.base}), sb.rpc('last_inputs')]);
   if(error) throw error;
-  S.summary = (data||[]).map(c=>({...c, _s: status(c)}))
+  const last = new Map((li||[]).map(r=>[r.customer_id, kstDate(r.last_input_at)]));
+  S.summary = (data||[]).map(c=>({...c, last_input: last.get(c.customer_id)||null, _s: status(c)}))
     .sort((a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko')); // 거래처 이름 가나다순
+}
+
+// 최근 입력: 앱에 마지막으로 거래를 등록한 날 (거래장 날짜가 아님). 30일 넘으면 주황색
+const STALE_DAYS = 30;
+const kstDate = ts => ts ? new Date(ts).toLocaleDateString('sv-SE', {timeZone:'Asia/Seoul'}) : null;
+function lastInputHtml(c, long){
+  if(!c.last_input) return '';
+  const ago = dd(todayStr(), c.last_input); const old = ago > STALE_DAYS;
+  const txt = `${long?c.last_input:md(c.last_input)} (${ago<=0?'오늘':ago+'일 전'})`;
+  return long ? `<span style="${old?'color:#b54708;font-weight:700':''}">${txt}</span>`
+              : `<span style="${old?'color:#b54708':''}">최근 입력 <b style="${old?'color:#b54708':''}">${txt}</b></span>`;
 }
 
 // ===== 화면: 공통 헤더 =====
@@ -326,7 +338,7 @@ function viewDash(){
     <div class="row" style="margin:14px 0 2px">
       <h3 class="grow" style="margin:0">거래처 <span class="muted" style="font-weight:400">${list.length}처</span></h3>
       <select class="i" id="srt" style="width:auto;flex:0 0 auto;padding:8px 10px" aria-label="정렬">
-        ${[['name','이름순'],['turnDesc','회전일 긴 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<option value="${v}" ${(S.sort||'name')===v?'selected':''}>${t}</option>`).join('')}
+        ${[['name','이름순'],['turnDesc','회전일 긴 순'],['turnAsc','회전일 짧은 순'],['inputOld','최근 입력 오래된 순']].map(([v,t])=>`<option value="${v}" ${(S.sort||'name')===v?'selected':''}>${t}</option>`).join('')}
       </select>
     </div>
     ${S.bucket?`<div class="row" style="margin:4px 0 0"><span class="chip c-warn">회전일 ${BK_LABEL[S.bucket]} 거래처 ${list.length}처만 보는 중</span>
@@ -340,6 +352,7 @@ function viewDash(){
           <span>잔액 <b>${won(c.balance)}</b></span>          <span>회전일 <b>${c.turnover_days??(Number(c.balance)?'미상':'-')}</b>${c.turnover_days!=null?'일':''}</span>
           ${Number(c.over_block)>0?`<span>181일↑ <b style="color:var(--red)">${won(c.over_block)}</b></span>`:''}
           ${left!=null && Number(c.over_block)===0?`<span>회전일 초과 <b>${md(c.block_start_date)}</b> (D-${dd(c.block_start_date,S.base)})</span>`:''}
+          ${lastInputHtml(c)}
           ${c.pending_count>0?`<span class="chip c-warn">확인대기 ${c.pending_count}</span>`:''}
           ${c.ledger_mismatch_count>0?`<span class="chip c-block">잔액 불일치 ${c.ledger_mismatch_count}</span>`:''}
         </div></button>`;}).join('')
@@ -352,12 +365,13 @@ function viewDash(){
   srt.onchange = ()=>{ S.sort = srt.value; viewDash(); };
 }
 
-// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
+// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 / 최근 입력 오래된 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
 function sortList(arr){
   const byName = (a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko');
   const t = c => Number(c.balance)>0 && c.turnover_days!=null ? Number(c.turnover_days) : null;
   const mode = S.sort || 'name';
   if(mode==='name') return [...arr].sort(byName);
+  if(mode==='inputOld') return [...arr].sort((a,b)=> (a.last_input||'').localeCompare(b.last_input||'') || byName(a,b)); // 입력 없는 거래처가 맨 위
   return [...arr].sort((a,b)=>{ const x=t(a), y=t(b);
     if(x==null && y==null) return byName(a,b); if(x==null) return 1; if(y==null) return -1;
     return (mode==='turnDesc' ? y-x : x-y) || byName(a,b); });
@@ -409,6 +423,7 @@ async function viewDetail(){
         <div>회전일</div><div><b>${c.turnover_days??'-'}${c.turnover_days!=null?'일':''}</b>${c.oldest_date?`<div class="muted" style="white-space:nowrap">(가장 오래된 채권 ${c.oldest_date})</div>`:''}</div>
         ${c.last_order_date?`<div>마지막 주문 가능일</div><div><b>${c.last_order_date}</b></div>
         <div>차단 시작</div><div>${c.block_start_date}</div>`:''}
+        ${c.last_input?`<div>최근 입력</div><div>${lastInputHtml(c, true)}</div>`:''}
         ${S.isAdmin?`<div>담당자</div><div><select class="i" id="ownSel" style="padding:6px 8px;max-width:220px">${S.members.map(m=>`<option value="${m.user_id}" ${m.user_id===c.owner_id?'selected':''}>${esc(m.display_name)}${m.active===false?' (사용 중지)':''}</option>`).join('')}</select></div>`:''}
       </div>
     </div>
