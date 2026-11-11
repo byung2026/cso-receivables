@@ -896,7 +896,7 @@ async function viewTeam(msg, ok, cred){
     </form>
     <div class="card"><h3>등록된 담당자 (${S.members.length}명)</h3>
       <table class="t team"><tr><th>이름 · 아이디</th><th class="n">거래처</th><th></th></tr>
-      ${S.members.map(m=>`<tr style="${m.active===false?'opacity:.55':''}"><td>${esc(m.display_name)}${m.user_id===me?' <span class="badge b-admin">관리자</span>':''}${m.active===false?' <span class="badge" style="background:#e5e7eb;color:#4b5563">사용 중지</span>':''}
+      ${S.members.map(m=>`<tr style="${m.active===false?'opacity:.55':''}"><td id="mn-${m.user_id}">${esc(m.display_name)} <button type="button" class="btn sm sec" style="padding:1px 6px;font-size:12px" onclick="editMemberName('${m.user_id}')" aria-label="이름 변경">✏️</button>${m.user_id===me?' <span class="badge b-admin">관리자</span>':''}${m.active===false?' <span class="badge" style="background:#e5e7eb;color:#4b5563">사용 중지</span>':''}
           <div class="muted" style="font-size:12.5px">${esc(shownId(m.login_id))} · ${md((m.created_at||'').slice(0,10))} 등록</div></td>
         <td class="n">${cnt(m.user_id)}처</td>
         <td class="n">${m.user_id===me?'':`<div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">
@@ -939,6 +939,23 @@ function credBox(c){
 async function copyCred(){ const t=document.getElementById('credTxt').textContent;
   try{ await navigator.clipboard.writeText(t); toast('복사했습니다.'); }
   catch(_){ const r=document.createRange(); r.selectNodeContents(document.getElementById('credTxt')); const sel=getSelection(); sel.removeAllRanges(); sel.addRange(r); toast('글자가 선택되었습니다. 길게 눌러 복사하세요.'); } }
+// 담당자 표시 이름 변경 (관리자). 거래처·거래 내역에는 영향 없음
+function editMemberName(uid){
+  const m = S.members.find(x=>x.user_id===uid); if(!m) return;
+  const td = document.getElementById('mn-'+uid);
+  td.innerHTML = `<form id="mnf" style="display:flex;gap:6px;flex-wrap:wrap"><input class="i" id="mnIn" maxlength="20" value="${esc(m.display_name)}" style="flex:1 1 100%" autocomplete="off">
+    <button class="btn sm">저장</button><button type="button" class="btn sm sec" onclick="viewTeam()">취소</button><div id="mnMsg" class="err" style="flex-basis:100%"></div></form>`;
+  const inp=document.getElementById('mnIn'); inp.focus(); inp.select();
+  document.getElementById('mnf').onsubmit = async e=>{
+    e.preventDefault(); const nm=inp.value.trim().replace(/\s+/g,' '); const msg=document.getElementById('mnMsg');
+    if(!nm){ msg.textContent='이름을 입력하세요.'; return; }
+    if(nm===m.display_name){ viewTeam(); return; }
+    const {error} = await sb.from('members').update({display_name:nm}).eq('user_id', uid);
+    if(error){ msg.textContent=errMsg(error); return; }
+    if(uid===S.session.user.id && S.me) S.me.display_name=nm;
+    await loadSummary().catch(()=>{}); await viewTeam(); toast(`이름을 '${nm}'(으)로 바꿨습니다.`);
+  };
+}
 async function setActive(uid, on){
   const m = S.members.find(x=>x.user_id===uid); if(!m) return;
   if(!confirm(on ? `${m.display_name}님 계정을 다시 사용하게 할까요?` : `${m.display_name}님 계정을 사용 중지할까요?\n(바로 로그인·조회가 막힙니다. 거래처와 거래 내역은 그대로 남습니다)`)) return;
