@@ -387,6 +387,25 @@ function bucketOf(c){
 function pickBucket(k){ S.bucket = (k && S.bucket!==k) ? k : null; viewDash(); }
 
 // ===== 거래처 상세 =====
+// 거래처 이름 변경 (담당자 본인 또는 관리자). 거래 내역·사진·담당자는 그대로
+function editCustName(){
+  const c = S.summary.find(x=>x.customer_id===S.custId); if(!c) return;
+  const row = document.getElementById('cnRow');
+  row.innerHTML = `<form id="cnf" class="grow" style="display:flex;gap:6px;flex-wrap:wrap">
+    <input class="i" id="cnIn" maxlength="40" value="${esc(c.customer_name)}" style="flex:1 1 100%" autocomplete="off">
+    <button class="btn sm">저장</button><button type="button" class="btn sm sec" onclick="viewDetail()">취소</button>
+    <div id="cnMsg" class="err" style="flex-basis:100%"></div></form>`;
+  const inp=document.getElementById('cnIn'); inp.focus(); inp.select();
+  document.getElementById('cnf').onsubmit = async e=>{
+    e.preventDefault(); const nm = inp.value.trim().replace(/\s+/g,' '); const msg=document.getElementById('cnMsg');
+    if(!nm){ msg.textContent='이름을 입력하세요.'; return; }
+    if(nm===c.customer_name){ viewDetail(); return; }
+    if(S.summary.some(x=>x.owner_id===c.owner_id && x.customer_id!==c.customer_id && x.customer_name===nm)){ msg.textContent='같은 담당자에게 이미 같은 이름의 거래처가 있습니다.'; return; }
+    const {error} = await sb.from('customers').update({name: nm}).eq('id', c.customer_id);
+    if(error){ msg.textContent = /duplicate|unique|23505/.test(error.message+error.code) ? '같은 담당자에게 이미 같은 이름의 거래처가 있습니다.' : errMsg(error); return; }
+    toast(`이름을 '${nm}'(으)로 바꿨습니다.`); await refresh(true);
+  };
+}
 async function openCust(id, replace){ pushNav({v:'detail', id}, replace); S.custId=id; S.view='detail'; await viewDetail(); }
 function runCheck(entries){
   let rb=0; return entries.map(e=>{
@@ -416,7 +435,7 @@ async function viewDetail(){
   const s=c._s; const bd = (k,lbl,hot)=>`<div class="bk ${hot&&Number(c[k])>0?'hot':''} ${Number(c[k])>0?'tap':''}" data-bk="${k}" data-lbl="${lbl.replace(/ \(.*/,'')}"><div class="k">${lbl}</div><div class="v">${won(c[k])}</div></div>`;
   app.innerHTML = header(c.customer_name, true) + `<div class="wrap">
     <div class="card">
-      <div class="row"><h3 class="grow" style="margin:0">${esc(c.customer_name)}</h3><span class="chip ${s.cls}">${s.t}</span></div>
+      <div class="row" id="cnRow"><h3 class="grow" style="margin:0">${esc(c.customer_name)} <button type="button" class="btn sm sec" style="padding:2px 8px;font-size:13px;vertical-align:middle" onclick="editCustName()" aria-label="거래처 이름 변경">✏️ 이름</button></h3><span class="chip ${s.cls}">${s.t}</span></div>
       <div class="kv" style="margin-top:10px">
         <div>기준일</div><div>${S.base}</div>
         <div>미수 잔액</div><div><b>${won(c.balance)}원</b>${Number(c.prepayment)>0?` · 선수금 ${won(c.prepayment)}원`:''}</div>
