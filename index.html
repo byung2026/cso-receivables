@@ -635,7 +635,7 @@ async function readPhotos(files, onStatus){
     const dup = firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
     if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
     const flag = dup?'dup': r.unclear?'unc':'';
-    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag}; });
+    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag, fixed:!!r.fixed}; });
   return {name, rows, models:[...new Set(all.map(r=>r._model))]};
 }
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품','할인':'매출할인','매출할인':'매출할인'};
@@ -710,7 +710,7 @@ function paintStatus(){
     const e = ev[+el.dataset.i]; const st = el.querySelector('[data-st]');
     el.classList.remove('ok','mis','err','skip','zero'); if(e.zero) el.classList.add('zero');
     if(e.state==='blank'){ st.textContent=''; return; }
-    el.classList.add(e.state); st.textContent = e.state==='skip' ? '저장하지 않습니다' : e.msg;
+    el.classList.add(e.state); st.textContent = e.state==='skip' ? '저장하지 않습니다' : ((S.rows[+el.dataset.i]?.fixed && e.state!=='err') ? '🔁 금액·잔액 위아래 자동 교정 · ' : '') + e.msg;
     if(e.state==='ok') save++; else if(e.state==='mis'){ save++; bad++; } else if(e.state==='err') bad++; else skip++;
   });
   const name = (document.getElementById('pc')||{}).value?.trim();

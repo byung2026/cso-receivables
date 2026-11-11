@@ -1,4 +1,4 @@
-// 거래장 사진 읽기: 저장소 사진 → Claude Haiku → 잔액 대조 → (불일치·불명확 시) Sonnet 재시도
+// 거래장 사진 읽기: 저장소 사진 → Claude Haiku → 잔액 대조(금액·잔액 자동 교정) → (불일치·불명확 시) Sonnet 재시도
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import { encodeBase64 } from "jsr:@std/encoding@1/base64";
@@ -20,6 +20,7 @@ const PROMPT = `이 사진은 한국 의약품 도매/제약회사의 거래처 
 - kind: 매출·출고·판매 → "판매", 입금·수금 → "수금", 전기이월·전월이월·이월 → "이월", 반품 → "반품", 매출할인·할인 → "매출할인"
 - 금액이 마이너스(-)로 찍힌 판매 행은 반품입니다: kind "반품", amount는 양수로. (적요에 할인이라고 적힌 마이너스 행은 "매출할인")
 - 매출할인은 잔액을 줄이는 행입니다. 판매로 읽지 마세요.
+- 거래장 모양: 한 거래가 두 줄로 찍히는 경우가 많습니다. 왼쪽 위=날짜, 왼쪽 아래=품목/적요, 가운데 위=수량, 가운데 아래=단가, 오른쪽 위=금액, 오른쪽 아래=잔액입니다. 수금(카드·현금·입금) 행도 똑같이 오른쪽 위가 수금액, 오른쪽 아래가 잔액입니다. 수금액이 바로 앞 잔액과 같아서 잔액이 0이 되는 경우도 흔하니 숫자가 같다고 위아래를 바꾸지 마세요.
 - amount: 그 행의 거래 총액(원, 부가세 포함 합계). 단가·수량이 아니라 금액/합계 칸의 값. 쉼표 없이 정수.
 - balance: 그 행 거래 후 잔액 칸의 값. 없으면 null.
 - date: YYYY-MM-DD. 연도가 생략됐으면 표의 다른 날짜·출력일로 추정. 이월 행에 날짜가 없으면 "".
@@ -57,7 +58,7 @@ const TOOL = {
   },
 };
 
-type Row = { date: string; kind: string; amount: number; item: string; balance: number | null; unclear: boolean; ok?: boolean };
+type Row = { date: string; kind: string; amount: number; item: string; balance: number | null; unclear: boolean; ok?: boolean; fixed?: boolean };
 
 function check(rows: Row[]) {
   let prev: number | null = null;
@@ -71,6 +72,30 @@ function check(rows: Row[]) {
     if (!r.ok) bad++;
     prev = r.balance;
   }
+  return bad;
+}
+
+// 금액·잔액을 위아래 바꿔 읽은 행 자동 교정: 불일치가 생긴 곳 근처(앞 행·그 행)에서 금액↔잔액을 맞바꿔 보고
+// 바꾼 행과 다음 행까지 잔액이 모두 맞고 전체 불일치가 줄어들면 채택 (fixed=true 로 표시)
+function autoSwap(rows: Row[]) {
+  let bad = check(rows);
+  let from = 0;
+  for (let guard = 0; guard < 20 && bad > 0; guard++) {
+    const i = rows.findIndex((r, k) => k >= from && r.ok === false);
+    if (i < 0) break;
+    let done = false;
+    for (const j of [i - 1, i]) {
+      const r = rows[j];
+      if (!r || r.kind === "이월" || r.balance == null || r.fixed) continue;
+      const trial = rows.map((x) => ({ ...x }));
+      trial[j] = { ...r, amount: Math.abs(r.balance), balance: r.amount };
+      const b2 = check(trial);
+      const nextOk = trial.slice(j, j + 2).every((x) => x.ok !== false);
+      if (b2 < bad && nextOk) { trial[j].fixed = true; rows.splice(0, rows.length, ...trial); bad = b2; done = true; break; }
+    }
+    from = done ? 0 : i + 1; // 못 고친 불일치는 건너뛰고 다음 불일치 확인
+  }
+  check(rows);
   return bad;
 }
 
@@ -129,11 +154,11 @@ Deno.serve(async (req) => {
 
     let used = "haiku";
     let result = await readWith(MODELS.fast, key, b64, mediaType);
-    let bad = check(result.rows);
+    let bad = autoSwap(result.rows);
     if (bad > 0 || result.rows.length === 0) {
       try {
         const r2 = await readWith(MODELS.accurate, key, b64, mediaType);
-        const bad2 = check(r2.rows);
+        const bad2 = autoSwap(r2.rows);
         if (r2.rows.length > 0 && bad2 <= bad) { result = r2; bad = bad2; used = "sonnet"; }
       } catch (_) { /* 재시도 실패 시 Haiku 결과 유지 */ }
     }
