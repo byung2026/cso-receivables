@@ -1,4 +1,4 @@
-// 관리자 전용: 아이디로 동료 계정 직접 만들기 / 임시 비밀번호로 초기화
+// 관리자 전용: 아이디로 동료 계정 직접 만들기 / 임시 비밀번호로 초기화 / 사용 중지·다시 사용
 // 아이디는 내부적으로 '<아이디>@cso-chart.invalid' 형태의 가짜 메일로 저장 (메일 발송 없음)
 // 첫 로그인 때 비밀번호를 바꾸도록 user_metadata.must_change_pw = true 표시
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
@@ -29,7 +29,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = String(body.action ?? "");
     const password = String(body.password ?? "");
-    if (password.length < 8) return json({ error: "PW", message: "임시 비밀번호는 8자 이상으로 정하세요." }, 400);
+    if ((action === "create" || action === "reset") && password.length < 8)
+      return json({ error: "PW", message: "임시 비밀번호는 8자 이상으로 정하세요." }, 400);
 
     const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 
@@ -53,13 +54,22 @@ Deno.serve(async (req) => {
       return json({ ok: true, login_id: loginId, name });
     }
 
-    if (action === "reset") {
+    if (action === "reset" || action === "disable" || action === "enable") {
       const uid = String(body.user_id ?? "");
-      if (!uid || uid === user.id) return json({ error: "TARGET", message: "본인 비밀번호는 여기서 바꿀 수 없습니다." }, 400);
-      // 다른 관리자는 초기화하지 않음
+      if (!uid || uid === user.id) return json({ error: "TARGET", message: "본인 계정은 여기서 바꿀 수 없습니다." }, 400);
+      // 다른 관리자 계정은 건드리지 않음
       const { data: targetIsAdmin, error: ae } = await admin.schema("receivables").rpc("is_admin_uid", { p_uid: uid });
       if (ae) return json({ error: "SERVER", message: ae.message }, 500);
-      if (targetIsAdmin === true) return json({ error: "TARGET", message: "관리자 계정은 초기화할 수 없습니다." }, 400);
+      if (targetIsAdmin === true) return json({ error: "TARGET", message: "관리자 계정은 바꿀 수 없습니다." }, 400);
+      if (action !== "reset") {
+        // 사용 중지: 로그인 차단(ban) + members.active=false (데이터 접근도 막힘). 다시 사용: 둘 다 해제
+        const off = action === "disable";
+        const { error: be } = await admin.auth.admin.updateUserById(uid, { ban_duration: off ? "876000h" : "none" });
+        if (be) return json({ error: "BAN", message: be.message }, 400);
+        const { error: me } = await admin.schema("receivables").from("members").update({ active: !off }).eq("user_id", uid);
+        if (me) return json({ error: "SERVER", message: me.message }, 500);
+        return json({ ok: true, active: !off });
+      }
       const { data: got, error: ge } = await admin.auth.admin.getUserById(uid);
       if (ge || !got?.user) return json({ error: "TARGET", message: "계정을 찾을 수 없습니다." }, 404);
       const { error } = await admin.auth.admin.updateUserById(uid, {
