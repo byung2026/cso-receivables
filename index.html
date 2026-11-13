@@ -271,8 +271,9 @@ async function loadMe(){
   ]);
   S.isAdmin = adm === true; S.me = me || null;
   if(me && me.active===false){ S.loginMsg='사용 중지된 계정입니다. 관리자에게 문의하세요.'; await sb.auth.signOut(); throw Object.assign(new Error('사용 중지된 계정입니다. 관리자에게 문의하세요.'), {inactive:true}); }
-  if(S.isAdmin){ const {data} = await sb.from('members').select('*').order('display_name'); S.members = data || []; }
+  if(S.isAdmin) await loadMembers();
 }
+async function loadMembers(){ const {data} = await sb.from('members').select('*').order('display_name'); S.members = data || []; }
 async function loadSummary(){
   const [{data, error}, {data:li}] = await Promise.all([sb.rpc('customer_summary', {p_base: S.base}), sb.rpc('last_inputs')]);
   if(error) throw error;
@@ -424,7 +425,11 @@ function viewDash(){
   const sum = (f)=> base_.reduce((a,c)=>a+Number(f(c)||0),0);
   const cnt = (k)=> base_.filter(c=>c._s.k===k).length;
   const ownerMap = new Map([[S.session.user.id, (S.me?.display_name||'나')+' (나)']]); // 내 이름을 항상 맨 위에
-  S.summary.forEach(c=>{ if(!ownerMap.has(c.owner_id)) ownerMap.set(c.owner_id, c.owner_name||'(이름 없음)'); });
+  // 담당자 목록: 등록된 동료 전원(거래처 0처 포함, 사용 중지 제외) + 거래처에 있는 담당자, 이름순
+  const others = new Map();
+  (S.members||[]).filter(m=>m.active!==false && m.user_id!==S.session.user.id).forEach(m=>others.set(m.user_id, m.display_name||'(이름 없음)'));
+  S.summary.forEach(c=>{ if(c.owner_id!==S.session.user.id && !others.has(c.owner_id)) others.set(c.owner_id, c.owner_name||'(이름 없음)'); });
+  [...others.entries()].sort((a,b)=>a[1].localeCompare(b[1],'ko')).forEach(([id,n])=>ownerMap.set(id,n));
   const owners = [...ownerMap.entries()];
   const nBlock=cnt('block'), nSoon=cnt('soon');
   const ownerName = S.ownerFilter==='all' ? '전체 담당자' : (ownerMap.get(S.ownerFilter)||'').replace(' (나)','');
@@ -1124,7 +1129,7 @@ function openDocs(){
 
 // ===== 흐름 =====
 async function refresh(rerender=true){
-  try{ await loadSummary(); }catch(e){ toast(errMsg(e)); }
+  try{ await Promise.all([loadSummary(), S.isAdmin ? loadMembers() : null]); }catch(e){ toast(errMsg(e)); }
   if(!rerender) return;
   if(S.view==='detail') await viewDetail(); else if(S.view==='dash') viewDash();
 }
