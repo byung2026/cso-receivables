@@ -193,6 +193,24 @@ h3{font-size:16px;margin:0 0 10px;font-weight:800}
 .seg{display:flex;background:var(--chip);border-radius:12px;padding:3px;gap:2px}
 .seg button{flex:1 1 auto;border:0;background:transparent;padding:9px 6px;cursor:pointer;white-space:nowrap;border-radius:9px;font-weight:600;color:var(--sub)}
 .seg button.on{background:#fff;color:var(--blue);font-weight:800;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+/* 월말 수금 계산기 (아래에서 올라오는 창) */
+.cta.b{background:var(--blue-bg);color:var(--blue)}
+.sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#F7FAFF;border-radius:22px 22px 0 0;padding:8px 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(16,24,40,.18);max-width:640px;margin:0 auto}
+.sheet .grab{width:40px;height:5px;border-radius:3px;background:#D0D5DD;margin:4px auto 10px}
+.sheet .hd{display:flex;align-items:center;gap:8px}.sheet .hd h3{flex:1;margin:0;font-size:18px;display:flex;align-items:center;gap:8px}
+.sheet .x{width:36px;height:36px;border-radius:50%;border:0;background:var(--chip);font-size:18px;cursor:pointer;color:var(--sub)}
+.cf{display:grid;grid-template-columns:1fr 1.4fr;gap:8px;margin-top:12px}.cf label{font-size:12.5px;color:var(--sub);font-weight:600;display:block}
+.cf .i{margin-top:4px;font-weight:700}
+.qb{display:flex;gap:6px;margin-top:8px}.qb button{flex:1;background:#fff;border:1px solid #DCE3EE;border-radius:10px;padding:9px 0;font-size:13px;font-weight:700;color:var(--sub);cursor:pointer}
+.cres{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:14px}.cres>div{background:#fff;border-radius:14px;padding:12px;min-width:0}
+.cres .l{font-size:12.5px;color:var(--mute);font-weight:600}.cres .v{font-size:20px;font-weight:800;margin-top:3px;white-space:nowrap}.cres .b{font-size:12.5px;color:var(--mute);margin-top:2px}
+.cres .v s{font-size:14px;color:#B0B8C1;font-weight:700;margin-right:4px}
+.clst{background:#fff;border-radius:14px;padding:2px 12px;margin-top:8px}.clst .o{display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--line);font-size:14.5px;gap:8px}
+.clst .o:last-child{border:0}.clst .o .n{min-width:0}.clst .o .n b{word-break:keep-all}.clst .s{font-size:12px;color:var(--mute)}.clst .done .n b{text-decoration:line-through;color:#B0B8C1}
+.clst .done .r{color:var(--grn);font-weight:700;font-size:13px}.clst .part .r{font-weight:700}.clst .r{white-space:nowrap;text-align:right}
+.ctg{margin-top:14px}.ctg .h{font-size:14px;font-weight:800;margin-bottom:6px}.ctg table{width:100%;border-collapse:collapse;background:#fff;border-radius:14px;overflow:hidden;font-size:14.5px}
+.ctg td{padding:11px 12px;border-bottom:1px solid var(--line)}.ctg td.n{text-align:right;font-weight:700;white-space:nowrap}.ctg tr:last-child td{border:0}.ctg .x2{color:var(--mute);font-weight:500;font-size:12.5px}
+.cfoot{font-size:12px;color:var(--mute);margin-top:12px;line-height:1.5}
 /* 좁은 화면(아이폰 SE 등): 요약 칸 글자 줄바꿈 */
 @media (max-width:370px){ .hero .mini .opt{display:none} .hero .mini>div{padding:8px} .hero .mini .l{font-size:11px} .hero .v{font-size:30px} .dist .bk .v{font-size:21px} }
 /* 넓은 화면(PC): 거래처 목록 2열 */
@@ -549,6 +567,7 @@ async function viewDetail(){
         <div style="text-align:right;min-width:0"><div class="k">미수 잔액</div><div class="v" style="font-size:24px">${won(c.balance)}<small style="font-size:16px">원</small></div></div></div>
       <div class="d">기준일 ${S.base.replaceAll('-','.')}${Number(c.prepayment)>0?` · 선수금 ${won(c.prepayment)}원`:''}</div></div>
     ${note}
+    ${Number(c.balance)>0?`<button class="cta b" onclick="openCalc()">${IC.cal.replace('class="ic"','class="ic" style="margin-right:6px"')}<span class="grow">월말 수금 계산하기</span>${IC.arrow}</button>`:''}
     <div class="kvl">
       ${c.oldest_date?`<div><span>가장 오래된 채권</span><b>${c.oldest_date}</b></div>`:''}
       ${c.last_order_date?`<div><span>마지막 주문 가능일</span><b>${c.last_order_date}</b></div><div><span>차단 시작</span><b style="${s.k==='block'||s.k==='soon'?'color:var(--red)':''}">${c.block_start_date}</b></div>`:''}
@@ -611,6 +630,61 @@ function ordersHtml(){
       <div class="tags"><span class="tag ${k}">${i.age_days!=null?i.age_days+'일':'날짜 미상'}${k==='block'?' · 주문 차단':''}</span><span class="s">${i.entry_date?md(i.entry_date)+' 발생 · 마감 '+md(addDays(i.entry_date, blockDays()-1)):'이월'}</span></div></div>
       <div class="r" style="${k==='block'?'color:var(--red)':''}">${won(i.remaining)}</div></div>`; }).join('') + moreBtn(items.length-shown.length,'moreOrd()')
     : '<div class="muted">이 구간의 주문이 없습니다.</div>');
+}
+// ===== 월말 수금 계산기 (계산만, 저장 안 함) =====
+// 지금 남은 미수(가장 오래된 것부터)에서 수금액을 빼 보고, 그날 기준 회전일·남는 미수·차단 예정일을 보여 줌
+function monthEnd(s){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+1,0); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function openCalc(){
+  const c = S.summary.find(x=>x.customer_id===S.custId); if(!c) return;
+  try{ history.pushState({...(history.state||{}), sheet:1}, ''); }catch(_){}
+  const box=document.createElement('div'); box.id='calcSheet';
+  box.innerHTML=`<div class="dim" style="z-index:50" onclick="closeCalc()"></div><div class="sheet" role="dialog" aria-label="월말 수금 계산기"><div class="grab"></div>
+    <div class="hd"><h3>${IC.cal}월말 수금 계산기</h3><button class="x" onclick="closeCalc()" aria-label="닫기">✕</button></div>
+    <div class="muted">${esc(c.customer_name)} · 받을 금액을 넣으면 그날 회전일을 미리 계산해요. 저장되지 않아요.</div>
+    <div class="cf"><div><label>수금 날짜<input class="i" type="date" id="cDate" value="${monthEnd(S.base)}"></label></div>
+      <div><label>수금 예정 금액 (원)<input class="i" id="cAmt" inputmode="numeric" placeholder="0" autocomplete="off"></label></div></div>
+    <div class="qb"><button data-a="1000000">+100만</button><button data-a="3000000">+300만</button><button data-a="5000000">+500만</button><button data-a="all">전액</button></div>
+    <div id="cOut"></div></div>`;
+  document.body.appendChild(box);
+  const amt=document.getElementById('cAmt'), dt=document.getElementById('cDate');
+  const val=()=>Number(amt.value.replace(/[^0-9]/g,''))||0;
+  const draw=()=>{ document.getElementById('cOut').innerHTML = calcHtml(c, dt.value||monthEnd(S.base), val()); };
+  amt.oninput=()=>{ const v=val(); amt.value = v? v.toLocaleString('ko-KR') : ''; draw(); };
+  dt.onchange=draw;
+  box.querySelectorAll('.qb button').forEach(b=>b.onclick=()=>{ const v = b.dataset.a==='all' ? Number(c.balance) : Math.min(Number(c.balance), val()+Number(b.dataset.a)); amt.value=v.toLocaleString('ko-KR'); draw(); });
+  draw(); setTimeout(()=>amt.focus(), 250);
+}
+function closeCalc(){ if(!document.getElementById('calcSheet')) return; if(history.state && history.state.sheet) history.back(); else document.getElementById('calcSheet').remove(); }
+function calcHtml(c, D, pay){
+  const items=(S.detItems||[]).map(i=>({...i, rem:Number(i.remaining)}));
+  const age = i => i.entry_date ? dd(D, i.entry_date) : null;
+  const turn = arr => { const a=arr.filter(i=>i.rem>0); if(!a.length) return {t:0}; if(a.some(i=>!i.entry_date)) return {t:null}; return {t:Math.max(...a.map(age)), oldest:a.find(i=>i.entry_date)}; };
+  const before=turn(items);
+  let left=pay; const after=items.map(i=>{ const cut=Math.min(i.rem, left); left-=cut; return {...i, cut, rem:i.rem-cut}; });
+  const aft=turn(after); const bal=after.reduce((t,i)=>t+i.rem,0);
+  const bd=blockDays(), dS=sd(D);
+  const fmtT = x => x.t==null ? '날짜 미상 포함' : x.t+'일';
+  const blockOf = x => x.oldest ? addDays(x.oldest.entry_date, bd) : null;
+  const bNow=blockOf(before), bAft=blockOf(aft);
+  const tcls = t => t==null ? '' : t>=bd ? 'color:var(--red)' : t>=bd-31 ? 'color:var(--org)' : 'color:var(--blue)';
+  const res = `<div class="cres"><div><div class="l">${dS} 회전일</div><div class="v" style="${tcls(aft.t)}">${pay&&before.t!==aft.t?`<s>${fmtT(before)}</s>`:''}${bal?fmtT(aft):'0일'}</div>
+      <div class="b">${!bal?'미수가 모두 정리돼요':pay&&before.t!=null&&aft.t!=null&&before.t>aft.t?`${before.t-aft.t}일 줄어요`:aft.t!=null&&aft.t>=bd?'<b style="color:var(--red)">주문 차단 상태예요</b>':pay?'회전일은 그대로예요':'수금 없을 때'}</div></div>
+    <div><div class="l">남는 미수</div><div class="v">${won(bal)}<small style="font-size:13px">원</small></div>
+      <div class="b">${!bal?'—':bNow&&bAft&&bNow!==bAft?`차단 ${sd(bNow)} → <b style="color:var(--grn)">${sd(bAft)}</b>`:bAft?`차단 예정 ${sd(bAft)}`:''}</div></div></div>`;
+  const shown = after.filter(i=>i.cut>0 || i.rem>0);
+  const firstLeft = after.find(i=>i.rem>0);
+  const lst = `<div class="clst">${shown.slice(0, Math.max(6, after.filter(i=>i.cut>0).length+3)).map(i=>{
+      const k = i.rem===0 ? 'done' : i.cut>0 ? 'part' : '';
+      const a=age(i);
+      return `<div class="o ${k}"><div class="n"><b>${esc(i.item||i.kind)}</b><div class="s">${i.entry_date?md(i.entry_date)+' 발생':'이월'}${a!=null?` · ${dS}에 ${a}일`:''}${k==='part'?` · ${won(i.cut)}원 빠짐`:''}</div></div>
+        <div class="r">${k==='done'?'✓ 다 빠짐':`${won(i.rem)}원${k==='part'?' 남음':''}`}${i===firstLeft&&bal?'<div class="s">← 회전일 기준</div>':''}</div></div>`; }).join('')}
+      ${shown.length>Math.max(6, after.filter(i=>i.cut>0).length+3)?`<div class="o"><div class="s">그 밖의 최근 주문 ${shown.length-Math.max(6, after.filter(i=>i.cut>0).length+3)}건</div></div>`:''}</div>`;
+  // 목표 회전일까지 필요한 금액 = 그날 기준 N일 넘는 주문(날짜 미상 포함) 합계
+  const need = N => items.filter(i=>!i.entry_date || age(i)>N).reduce((t,i)=>t+i.rem,0);
+  const rows = [[120,'120일 이하'],[90,'90일 이하'],[60,'60일 이하'],[bd-1,'차단 피하기']].map(([N,l])=>{ const n=need(N);
+    return `<tr><td>${l} <span class="x2">· ${N===bd-1?bd+'일 미만':(x=>+x.slice(5,7)+'/'+(+x.slice(8)))(addDays(D,-N))+' 이전 주문 정리'}</span></td><td class="n" style="${n===0?'color:var(--grn)':''}">${won(n)}원</td></tr>`; }).join('');
+  return res + (items.length? lst : '') + `<div class="ctg"><div class="h">${dS}에 회전일을 맞추려면</div><table>${rows}</table></div>
+    <div class="cfoot">· 가장 오래된 미수부터 빠지는 방식(지금 계산과 동일)으로 계산해요.<br>· ${dS} 전에 새로 들어올 주문, 매출할인, 반품은 넣지 않았어요.</div>`;
 }
 function clearBucket(){ S.detBucket=null; S.ordN=PAGE; document.querySelectorAll('.bk').forEach(x=>x.classList.remove('sel')); document.getElementById('ordBody').innerHTML = ordersHtml(); }
 function addMonths(s,n){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
@@ -1140,6 +1214,8 @@ function pushNav(st, replace){ if(NAV_POP) return; try{ history[replace?'replace
 function goBack(){ if(history.state && history.state.v && history.state.v!=='dash') history.back(); else { S.view='dash'; refresh(true); } }
 window.addEventListener('popstate', async e=>{
   if(!S.session || !S.me) return;
+  if(document.getElementById('calcSheet')){ document.getElementById('calcSheet').remove(); return; } // 계산기 창 닫기
+  closeMenu();
   const st = e.state || {v:'dash'}; NAV_POP = true;
   try{
     if(st.v==='detail') await openCust(st.id);
