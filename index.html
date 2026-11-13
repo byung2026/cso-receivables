@@ -193,6 +193,10 @@ h3{font-size:16px;margin:0 0 10px;font-weight:800}
 .seg{display:flex;background:var(--chip);border-radius:12px;padding:3px;gap:2px}
 .seg button{flex:1 1 auto;border:0;background:transparent;padding:9px 6px;cursor:pointer;white-space:nowrap;border-radius:9px;font-weight:600;color:var(--sub)}
 .seg button.on{background:#fff;color:var(--blue);font-weight:800;box-shadow:0 1px 3px rgba(16,24,40,.12)}
+/* 캡처 이미지 붙여넣기 칸 */
+.pzone{margin-top:10px;border:2px dashed #C9D6F2;border-radius:14px;padding:14px;text-align:center;background:#F7FAFF;outline:none}
+.pzone.on,.pzone:focus{border-color:var(--blue);background:var(--blue-bg)}
+.pzone .pz1{font-weight:800;color:var(--blue);display:flex;align-items:center;justify-content:center;gap:6px}.pzone .pz2{font-size:13px;color:var(--mute);margin-top:4px}
 /* 월말 수금 계산기 (아래에서 올라오는 창) */
 .cta.b{background:var(--blue-bg);color:var(--blue)}
 .sheet{position:fixed;left:0;right:0;bottom:0;z-index:51;max-height:92vh;overflow-y:auto;-webkit-overflow-scrolling:touch;background:#F7FAFF;border-radius:22px 22px 0 0;padding:8px 16px calc(20px + env(safe-area-inset-bottom));box-shadow:0 -8px 30px rgba(16,24,40,.18);max-width:640px;margin:0 auto}
@@ -916,6 +920,9 @@ function viewPaste(){
     <label class="f">거래처</label><input class="i" id="pc" list="cl2" value="${esc(S.entryCustName)}" placeholder="병원이름"><datalist id="cl2">${custOptions()}</datalist>
     <div id="mstart" class="muted" style="margin-top:6px"></div>
     <label class="btn ${S.photoMode?'':'sec'}" style="display:block;text-align:center;margin-top:12px">${IC.cam} 거래장 사진으로 채우기<input type="file" id="pf" accept="image/*" multiple hidden></label>
+    <div id="pzone" class="pzone" tabindex="0"><div class="pz1">${IC.photo} 캡처한 이미지 붙여넣기</div>
+      <div class="pz2">${matchMedia('(pointer:fine)').matches?'캡처 후 <b>Ctrl+V</b> (맥은 ⌘+V) 또는 이미지를 여기로 끌어다 놓기':'캡처한 이미지를 복사한 뒤 아래 버튼을 누르세요'}</div>
+      <button type="button" class="btn sm sec" id="pclip" style="margin-top:8px">클립보드에서 붙여넣기</button></div>
     <div id="pst" class="muted" style="margin-top:6px">여러 장이면 위에서부터 찍은 순서대로 고르세요. 읽은 결과가 아래 표에 채워지고, 틀린 칸만 고치면 됩니다.</div>
   </div>
   <div id="rows"></div>
@@ -954,8 +961,24 @@ function viewPaste(){
   });
   addRow.onclick = ()=>{ const last=S.rows[S.rows.length-1]; S.rows.push(blankRow(last&&last.date)); renderRows();
     const els=document.querySelectorAll('#rows .mrow'); els[els.length-1].scrollIntoView({block:'center'}); };
-  pf.onchange = async ()=>{
-    const files=[...pf.files]; if(!files.length) return; pf.value='';
+  pf.onchange = async ()=>{ const files=[...pf.files]; pf.value=''; await handlePhotoFiles(files); };
+  // 캡처 이미지 붙여넣기: Ctrl+V(화면 어디서든), 끌어다 놓기, [클립보드에서 붙여넣기] 버튼
+  const pz=document.getElementById('pzone');
+  pz.ondragover = e=>{ e.preventDefault(); pz.classList.add('on'); };
+  pz.ondragleave = ()=>pz.classList.remove('on');
+  pz.ondrop = e=>{ e.preventDefault(); pz.classList.remove('on'); const fs=[...(e.dataTransfer?.files||[])].filter(f=>f.type.startsWith('image/')); if(fs.length) handlePhotoFiles(fs); };
+  document.getElementById('pclip').onclick = async ()=>{
+    const st=document.getElementById('pst');
+    try{
+      if(!navigator.clipboard?.read) throw new Error('이 브라우저는 버튼 붙여넣기를 지원하지 않습니다. Ctrl+V를 눌러 주세요.');
+      const items=await navigator.clipboard.read(); const fs=[];
+      for(const it of items){ const t=it.types.find(x=>x.startsWith('image/')); if(t){ const bl=await it.getType(t); fs.push(new File([bl], `capture-${Date.now()}.${t.split('/')[1]||'png'}`, {type:t})); } }
+      if(!fs.length){ st.className='err'; st.textContent='클립보드에 이미지가 없습니다. 화면을 캡처(복사)한 뒤 다시 눌러 주세요.'; return; }
+      await handlePhotoFiles(fs);
+    }catch(e){ st.className='err'; st.textContent = /denied|NotAllowed/i.test(e.name+e.message) ? '클립보드 접근이 막혀 있습니다. Ctrl+V로 붙여넣거나 브라우저에서 허용해 주세요.' : (e.message||String(e)); }
+  };
+  async function handlePhotoFiles(files){
+    if(!files.length) return;
     const st=document.getElementById('pst'); st.className='muted';
     try{
       const r=await readPhotos(files, m=>st.textContent=m);
@@ -965,7 +988,8 @@ function viewPaste(){
       S.photoMode=true; markExisting(); renderRows();
       st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 빨간 줄만 사진과 대조해서 고치세요.`;
     }catch(e){ st.className='err'; st.textContent='사진 읽기 실패: '+errMsg(e); }
-  };
+  }
+  S.onPasteImages = handlePhotoFiles;
   ps.onclick = async ()=>{
     ps.disabled=true; const name=pc.value.trim(); const ev=evalRows(); perr.textContent='';
     try{
@@ -1212,6 +1236,14 @@ async function refresh(rerender=true){
 let NAV_POP = false;
 function pushNav(st, replace){ if(NAV_POP) return; try{ history[replace?'replaceState':'pushState'](st, ''); }catch(_){} }
 function goBack(){ if(history.state && history.state.v && history.state.v!=='dash') history.back(); else { S.view='dash'; refresh(true); } }
+// 사진·여러 줄 입력 화면에서 Ctrl+V로 캡처 이미지를 붙여넣으면 바로 읽기 (글자 붙여넣기는 그대로)
+document.addEventListener('paste', e=>{
+  if(S.view!=='paste' || !S.onPasteImages) return;
+  const fs=[...(e.clipboardData?.items||[])].filter(it=>it.kind==='file' && it.type.startsWith('image/')).map(it=>it.getAsFile()).filter(Boolean);
+  if(!fs.length) return;
+  e.preventDefault();
+  S.onPasteImages(fs.map((f,i)=>new File([f], `capture-${Date.now()}-${i}.${(f.type.split('/')[1]||'png')}`, {type:f.type})));
+});
 window.addEventListener('popstate', async e=>{
   if(!S.session || !S.me) return;
   if(document.getElementById('calcSheet')){ document.getElementById('calcSheet').remove(); return; } // 계산기 창 닫기
