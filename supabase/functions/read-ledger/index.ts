@@ -21,6 +21,10 @@ const PROMPT = `이 사진은 한국 의약품 도매/제약회사의 거래처 
 - 금액이 마이너스(-)로 찍힌 판매 행은 반품입니다: kind "반품", amount는 양수로. (적요에 할인이라고 적힌 마이너스 행은 "매출할인")
 - 매출할인은 잔액을 줄이는 행입니다. 판매로 읽지 마세요.
 - 거래장 모양: 한 거래가 두 줄로 찍히는 경우가 많습니다. 왼쪽 위=날짜, 왼쪽 아래=품목/적요, 가운데 위=수량, 가운데 아래=단가, 오른쪽 위=금액, 오른쪽 아래=잔액입니다. 수금(카드·현금·입금) 행도 똑같이 오른쪽 위가 수금액, 오른쪽 아래가 잔액입니다. 수금액이 바로 앞 잔액과 같아서 잔액이 0이 되는 경우도 흔하니 숫자가 같다고 위아래를 바꾸지 마세요.
+- 두 줄짜리 거래는 반드시 한 행으로 합쳐서 돌려주세요. 날짜가 있는 윗줄과 바로 아래 품목/적요 줄이 한 거래입니다. 한 거래를 두 행으로 나누지 마세요.
+- 가운데 아래 숫자(단가)는 금액이 아닙니다. 금액은 오른쪽 위 숫자입니다.
+- 사진 맨 위나 맨 아래에서 거래의 한 줄만 잘려 보이면(날짜 줄만 있거나 품목 줄만 있는 경우) 그 거래는 넣지 마세요.
+- 수금(카드·현금·입금) 행의 금액이 0이면 잘못 읽은 것입니다. 오른쪽 위 숫자를 다시 확인하세요.
 - amount: 그 행의 거래 총액(원, 부가세 포함 합계). 단가·수량이 아니라 금액/합계 칸의 값. 쉼표 없이 정수.
 - balance: 그 행 거래 후 잔액 칸의 값. 없으면 null.
 - date: YYYY-MM-DD. 연도가 생략됐으면 표의 다른 날짜·출력일로 추정. 이월 행에 날짜가 없으면 "".
@@ -58,7 +62,7 @@ const TOOL = {
   },
 };
 
-type Row = { date: string; kind: string; amount: number; item: string; balance: number | null; unclear: boolean; ok?: boolean; fixed?: boolean };
+type Row = { date: string; kind: string; amount: number; item: string; balance: number | null; unclear: boolean; ok?: boolean; fixed?: string | boolean };
 
 function check(rows: Row[]) {
   let prev: number | null = null;
@@ -75,8 +79,15 @@ function check(rows: Row[]) {
   return bad;
 }
 
-// 금액·잔액을 위아래 바꿔 읽은 행 자동 교정: 불일치가 생긴 곳 근처(앞 행·그 행)에서 금액↔잔액을 맞바꿔 보고
-// 바꾼 행과 다음 행까지 잔액이 모두 맞고 전체 불일치가 줄어들면 채택 (fixed=true 로 표시)
+// 자동 교정: 잔액이 안 맞는 곳 근처에서
+//  (1) 금액↔잔액을 위아래 바꿔 읽은 행 → 맞바꿔 보기 (fixed='swap')
+//  (2) 두 줄짜리 거래를 두 행으로 나눠 읽은 경우 → 붙은 두 행을 한 거래로 합쳐 보기 (fixed='merge')
+// 고친 행과 다음 행까지 잔액이 맞고 전체 불일치가 줄어들 때만 채택
+function merged(a: Row, b: Row): Row {
+  const kind = a.kind !== "이월" ? a.kind : b.kind;
+  return { ...a, date: a.date || b.date, kind, amount: Math.abs(a.amount || a.balance || 0), balance: b.balance,
+    item: (a.item && a.item !== "매출할인" ? a.item : "") || b.item || a.item, unclear: a.unclear && b.unclear, fixed: "merge" };
+}
 function autoSwap(rows: Row[]) {
   let bad = check(rows);
   let from = 0;
@@ -84,14 +95,27 @@ function autoSwap(rows: Row[]) {
     const i = rows.findIndex((r, k) => k >= from && r.ok === false);
     if (i < 0) break;
     let done = false;
-    for (const j of [i - 1, i]) {
-      const r = rows[j];
-      if (!r || r.kind === "이월" || r.balance == null || r.fixed) continue;
-      const trial = rows.map((x) => ({ ...x }));
-      trial[j] = { ...r, amount: Math.abs(r.balance), balance: r.amount };
-      const b2 = check(trial);
-      const nextOk = trial.slice(j, j + 2).every((x) => x.ok !== false);
-      if (b2 < bad && nextOk) { trial[j].fixed = true; rows.splice(0, rows.length, ...trial); bad = b2; done = true; break; }
+    const tries: Array<() => { trial: Row[]; at: number } | null> = [
+      ...[i - 1, i].map((j) => () => {
+        const r = rows[j];
+        if (!r || r.kind === "이월" || r.balance == null || r.fixed) return null;
+        const trial = rows.map((x) => ({ ...x }));
+        trial[j] = { ...r, amount: Math.abs(r.balance), balance: r.amount, fixed: "swap" };
+        return { trial, at: j };
+      }),
+      ...[i - 1, i].map((j) => () => {
+        const a = rows[j], b = rows[j + 1];
+        if (!a || !b || b.balance == null || (a.kind === "이월" && a.amount !== 0)) return null; // 진짜 전기이월은 합치지 않음
+        const trial = rows.map((x) => ({ ...x }));
+        trial.splice(j, 2, merged(a, b));
+        return { trial, at: j };
+      }),
+    ];
+    for (const t of tries) {
+      const r = t(); if (!r) continue;
+      const b2 = check(r.trial);
+      const localOk = r.trial.slice(r.at, r.at + 2).every((x) => x.ok !== false);
+      if (b2 < bad && localOk) { rows.splice(0, rows.length, ...r.trial); bad = b2; done = true; break; }
     }
     from = done ? 0 : i + 1; // 못 고친 불일치는 건너뛰고 다음 불일치 확인
   }
