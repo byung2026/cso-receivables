@@ -86,7 +86,8 @@ textarea.i{min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:1
 .hero .tag{display:inline-block;background:#fff;font-size:12.5px;font-weight:800;padding:4px 9px;border-radius:8px}
 .hero .tag.block{color:var(--red)}.hero .tag.soon{color:var(--org)}.hero .tag.ok{color:var(--blue)}.hero .tag.hold{color:#6A3FA0}.hero .tag.none{color:var(--gry)}
 .hero .two{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:6px}
-.chips{display:flex;gap:6px;margin:12px 0 2px;flex-wrap:wrap}
+.chips{display:flex;gap:6px;margin:12px 0 2px;flex-wrap:nowrap}
+.chips .chipsel{flex:1 1 0;min-width:0}.chips .chipsel select,.chips .chipsel input{flex:1;width:100%;max-width:none}
 .chipsel{display:inline-flex;align-items:center;gap:5px;background:var(--chip);border:0;border-radius:10px;padding:0 10px;height:38px;font-size:14px;font-weight:600;color:var(--sub);max-width:100%}
 .chipsel select,.chipsel input{border:0;background:transparent;font-size:16px;font-weight:600;color:var(--sub);padding:0;min-width:0;max-width:190px;-webkit-appearance:none;appearance:none;height:36px}
 .chipsel input[type=date]{max-width:150px;min-height:0;display:block}
