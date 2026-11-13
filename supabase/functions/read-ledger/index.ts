@@ -23,6 +23,7 @@ const PROMPT = `이 사진은 한국 의약품 도매/제약회사의 거래처 
 - 거래장 모양: 한 거래가 두 줄로 찍히는 경우가 많습니다. 왼쪽 위=날짜, 왼쪽 아래=품목/적요, 가운데 위=수량, 가운데 아래=단가, 오른쪽 위=금액, 오른쪽 아래=잔액입니다. 수금(카드·현금·입금) 행도 똑같이 오른쪽 위가 수금액, 오른쪽 아래가 잔액입니다. 수금액이 바로 앞 잔액과 같아서 잔액이 0이 되는 경우도 흔하니 숫자가 같다고 위아래를 바꾸지 마세요.
 - 두 줄짜리 거래는 반드시 한 행으로 합쳐서 돌려주세요. 날짜가 있는 윗줄과 바로 아래 품목/적요 줄이 한 거래입니다. 한 거래를 두 행으로 나누지 마세요.
 - 가운데 아래 숫자(단가)는 금액이 아닙니다. 금액은 오른쪽 위 숫자입니다.
+- 금액은 표에 찍힌 숫자를 그대로 쓰세요. 수량×단가로 직접 계산하거나 잔액 숫자를 금액에 옮겨 적지 마세요.
 - 사진 맨 위나 맨 아래에서 거래의 한 줄만 잘려 보이면(날짜 줄만 있거나 품목 줄만 있는 경우) 그 거래는 넣지 마세요.
 - 수금(카드·현금·입금) 행의 금액이 0이면 잘못 읽은 것입니다. 오른쪽 위 숫자를 다시 확인하세요.
 - amount: 그 행의 거래 총액(원, 부가세 포함 합계). 단가·수량이 아니라 금액/합계 칸의 값. 쉼표 없이 정수.
@@ -82,6 +83,7 @@ function check(rows: Row[]) {
 // 자동 교정: 잔액이 안 맞는 곳 근처에서
 //  (1) 금액↔잔액을 위아래 바꿔 읽은 행 → 맞바꿔 보기 (fixed='swap')
 //  (2) 두 줄짜리 거래를 두 행으로 나눠 읽은 경우 → 붙은 두 행을 한 거래로 합쳐 보기 (fixed='merge')
+//  (3) 앞·뒤 행 잔액은 맞는데 이 행 금액만 틀린 경우 → 잔액 차이로 금액 계산 (fixed='derive')
 // 고친 행과 다음 행까지 잔액이 맞고 전체 불일치가 줄어들 때만 채택
 function merged(a: Row, b: Row): Row {
   const kind = a.kind !== "이월" ? a.kind : b.kind;
@@ -110,6 +112,19 @@ function autoSwap(rows: Row[]) {
         trial.splice(j, 2, merged(a, b));
         return { trial, at: j };
       }),
+      () => { // (3) 금액만 잘못 읽은 행: 바로 앞 잔액과 이 행 잔액의 차이가 금액
+        const r = rows[i]; if (!r || r.kind === "이월" || r.balance == null || r.fixed) return null;
+        let p = i - 1; while (p >= 0 && rows[p].balance == null) p--;
+        if (p < 0 || rows[p].ok === false) return null;
+        const diff = r.balance - (rows[p].balance as number);
+        const amt = r.kind === "판매" ? diff : -diff;
+        if (amt <= 0) return null; // 판매면 잔액이 늘고, 수금·반품·할인이면 줄어야 함
+        const nx = rows.slice(i + 1).find((x) => x.balance != null);
+        if (nx && nx.ok === false) return null; // 다음 행 잔액도 맞아야 (잔액을 잘못 읽은 경우 제외)
+        const trial = rows.map((x) => ({ ...x }));
+        trial[i] = { ...r, amount: amt, fixed: "derive" };
+        return { trial, at: i };
+      },
     ];
     for (const t of tries) {
       const r = t(); if (!r) continue;
