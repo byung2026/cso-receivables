@@ -726,6 +726,7 @@ function viewEntry(msg, ok){
   app.innerHTML = header('거래 입력', true) + `<div class="wrap"><form id="ef" class="card">
     <label class="f">거래처 (처음 입력하면 자동으로 생성됩니다)</label>
     <input class="i" id="cn" list="cl" value="${esc(S.entryCustName)}" required placeholder="병원이름"><datalist id="cl">${custOptions()}</datalist>
+    ${ownerPickHtml('ownE')}
     <label class="f">구분</label>
     <div class="seg" id="kd">${['판매','수금','이월','반품','매출할인'].map((k,i)=>`<button type="button" data-k="${k}" class="${i===0?'on':''}">${k}</button>`).join('')}</div>
     <div id="cnh" class="muted" style="margin-top:6px"></div>
@@ -746,7 +747,7 @@ function viewEntry(msg, ok){
   it.addEventListener('input', ()=>{ delete it.dataset.auto; });
   const fmt = el=>el.oninput=()=>{ const v=el.value.replace(/[^0-9]/g,''); el.value=v?Number(v).toLocaleString('ko-KR'):''; };
   fmt(am); fmt(lb);
-  const hint=()=>{ cnh.textContent = (()=>{ const c=findCust(cn.value); return c&&isOther(c)?custHint(c):''; })(); };
+  const hint=()=>{ cnh.textContent = (()=>{ const c=findCust(cn.value); return c&&isOther(c)?custHint(c):''; })(); syncOwnerPick('ownE', cn.value); };
   cn.oninput=hint; hint();
   ef.onsubmit = async e=>{
     e.preventDefault(); const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
@@ -755,7 +756,7 @@ function viewEntry(msg, ok){
     if(!amt && kind!=='판매'){ out.className='err'; out.textContent='0원은 판매(첨부·무상 품목)만 저장할 수 있습니다.'; return; }
     if(kind!=='이월' && !dt.value){ out.className='err'; out.textContent='일자를 입력하세요.'; return; }
     try{
-      const cid = await customerIdFor(name);
+      const cid = await customerIdFor(name, pickedOwner('ownE'));
       const row = {customer_id:cid, kind, entry_date: dt.value||null, item: it.value.trim()||null,
         sale_amount: isCredit(kind)?0:amt, pay_amount: isCredit(kind)?amt:0,
         ledger_balance: lb.value? Number(lb.value.replace(/[^0-9-]/g,'')) : null, input_method:'직접', status:'확정'};
@@ -767,11 +768,29 @@ function viewEntry(msg, ok){
     }catch(er){ out.className='err'; out.textContent=errMsg(er); }
   };
 }
-async function customerIdFor(name){
+async function customerIdFor(name, owner){
   const found = findCust(name); // 관리자가 '병원명 (담당: 직원)'을 고르면 그 직원 거래처에 저장 (담당자는 그대로)
   if(found) return found.customer_id;
+  const me = S.session.user.id;
+  if(S.isAdmin && owner && owner!==me){ // 관리자가 새 거래처를 만들면서 담당자를 다른 동료로 지정
+    const nm = name.trim();
+    const ex = S.summary.find(c=>c.owner_id===owner && c.customer_name===nm); if(ex) return ex.customer_id;
+    const {data, error} = await sb.from('customers').insert({owner_id:owner, name:nm}).select('id').single();
+    if(error){ if(/duplicate|unique|23505/.test(error.message+error.code)){ const {data:d2}=await sb.from('customers').select('id').eq('owner_id',owner).eq('name',nm).single(); if(d2) return d2.id; } throw error; }
+    return data.id;
+  }
   const {data, error} = await sb.rpc('ensure_customer', {p_name:name}); if(error) throw error; return data;
 }
+// 관리자: 새 거래처일 때만 '담당자' 선택칸 보이기 (기본은 나)
+function ownerPickHtml(id){
+  if(!S.isAdmin) return '';
+  const me=S.session.user.id; const list=(S.members||[]).filter(m=>m.active!==false);
+  const opts=[[me,(S.me?.display_name||'나')+' (나)'], ...list.filter(m=>m.user_id!==me).sort((a,b)=>(a.display_name||'').localeCompare(b.display_name||'','ko')).map(m=>[m.user_id,m.display_name])];
+  return `<div id="${id}" class="ownpick" hidden><label class="f">새 거래처 담당자</label><select class="i" id="${id}Sel">${opts.map(([v,n])=>`<option value="${v}">${esc(n)}</option>`).join('')}</select>
+    <div class="muted" style="margin-top:4px">이 거래처를 맡을 사람을 고르세요. 나중에 거래처 화면에서도 바꿀 수 있습니다.</div></div>`;
+}
+function syncOwnerPick(id, name){ const w=document.getElementById(id); if(w) w.hidden = !(name && name.trim() && !findCust(name)); }
+function pickedOwner(id){ const w=document.getElementById(id); return w && !w.hidden ? document.getElementById(id+'Sel').value : null; }
 async function ledgerCheck(cid, lbv){
   const {data} = await sb.from('entries').select('*').eq('customer_id', cid);
   const rows = runCheck((data||[]).sort(sortEntries)); const last = [...rows].reverse().find(r=>r._rb!=null);
@@ -912,13 +931,14 @@ async function loadStartBal(){
     (data||[]).forEach(e=>S.existKeys.add(entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount)));
     const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
   if(markExisting()) renderRows(); // 표시가 바뀐 줄이 있을 때만 다시 그림 (입력 중인 칸 보호)
-  document.getElementById('mstart').textContent = ex ? custHint(ex, S.startBal) : (name?'새 거래처로 만들어집니다.':'');
+  document.getElementById('mstart').textContent = ex ? custHint(ex, S.startBal) : (name?'새 거래처로 만들어집니다.':''); syncOwnerPick('ownP', name);
   paintStatus();
 }
 function viewPaste(){
   app.innerHTML = header(S.photoMode?'사진으로 입력':'여러 줄 입력', true) + `<div class="wrap"><div class="card">
     <label class="f">거래처</label><input class="i" id="pc" list="cl2" value="${esc(S.entryCustName)}" placeholder="병원이름"><datalist id="cl2">${custOptions()}</datalist>
     <div id="mstart" class="muted" style="margin-top:6px"></div>
+    ${ownerPickHtml('ownP')}
     <label class="btn ${S.photoMode?'':'sec'}" style="display:block;text-align:center;margin-top:12px">${IC.cam} 거래장 사진으로 채우기<input type="file" id="pf" accept="image/*" multiple hidden></label>
     <div id="pzone" class="pzone" tabindex="0"><div class="pz1">${IC.photo} 캡처한 이미지 붙여넣기</div>
       <div class="pz2">${matchMedia('(pointer:fine)').matches?'캡처 후 <b>Ctrl+V</b> (맥은 ⌘+V) 또는 이미지를 여기로 끌어다 놓기':'캡처한 이미지를 복사한 뒤 아래 버튼을 누르세요'}</div>
@@ -932,7 +952,7 @@ function viewPaste(){
     <button class="btn" id="ps" style="width:100%;margin-top:8px" disabled>모두 저장</button><div id="perr" class="err"></div></div>
   </div>`;
   renderRows();
-  pc.onchange = loadStartBal; pc.oninput = paintStatus;
+  pc.onchange = loadStartBal; pc.oninput = ()=>{ paintStatus(); syncOwnerPick('ownP', pc.value); };
   if(pc.value) loadStartBal(); // 상세 화면에서 열면 거래처가 미리 채워짐
   const box = document.getElementById('rows');
   box.addEventListener('input', e=>{
@@ -993,7 +1013,7 @@ function viewPaste(){
   ps.onclick = async ()=>{
     ps.disabled=true; const name=pc.value.trim(); const ev=evalRows(); perr.textContent='';
     try{
-      const cid = await customerIdFor(name);
+      const cid = await customerIdFor(name, pickedOwner('ownP'));
       const ins = S.rows.map((r,i)=>({r, e:ev[i]})).filter(x=>x.e.state==='ok'||x.e.state==='mis').map(({r,e})=>({
         customer_id:cid, kind:r.kind, entry_date:r.date||null, item:r.item||null,
         sale_amount: isCredit(r.kind)?0:r.amt, pay_amount: isCredit(r.kind)?r.amt:0, ledger_balance:r.lb,
