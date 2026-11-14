@@ -915,7 +915,7 @@ function paintStatus(){
     const e = ev[+el.dataset.i]; const st = el.querySelector('[data-st]');
     el.classList.remove('ok','mis','err','skip','zero'); if(e.zero) el.classList.add('zero');
     if(e.state==='blank'){ st.textContent=''; return; }
-    el.classList.add(e.state); st.textContent = e.state==='skip' ? '저장하지 않습니다' : ((S.rows[+el.dataset.i]?.fixed && e.state!=='err') ? (S.rows[+el.dataset.i].fixed==='merge' ? '🔁 두 줄을 한 거래로 자동 교정 · ' : '🔁 금액·잔액 위아래 자동 교정 · ') : '') + e.msg;
+    el.classList.add(e.state); st.textContent = e.state==='skip' ? '저장하지 않습니다' : ((S.rows[+el.dataset.i]?.fixed && e.state!=='err') ? ({merge:'🔁 두 줄을 한 거래로 자동 교정 · ',derive:'🔁 금액을 잔액 차이로 자동 교정 · '}[S.rows[+el.dataset.i].fixed] || '🔁 금액·잔액 위아래 자동 교정 · ') : '') + e.msg;
     if(e.state==='ok') save++; else if(e.state==='mis'){ save++; bad++; } else if(e.state==='err') bad++; else skip++;
   });
   const name = (document.getElementById('pc')||{}).value?.trim();
