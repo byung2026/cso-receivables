@@ -470,7 +470,7 @@ function custSub(c){
   const parts=[]; if(S.isAdmin && S.ownerFilter==='all') parts.push(esc(c.owner_name||'-')); // 한 사람 것만 볼 때는 담당자 이름 생략
   const bt=blockTxt(c); if(bt) parts.push(bt);
   if(c.last_input){ const ago=dd(todayStr(), c.last_input); parts.push(`<span class="${ago>STALE_DAYS?'old':''}">최근 입력 ${fd(c.last_input)}${ago>STALE_DAYS?` (${ago}일 전)`:''}</span>`); }
-  return parts.join(' · ');
+  return parts.map(x=>`<span style="white-space:nowrap">${x}</span>`).join(' · '); // 날짜가 중간에서 줄바꿈되지 않게
 }
 function viewDash(){
   const base_ = S.summary.filter(c=>
