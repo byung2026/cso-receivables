@@ -566,7 +566,7 @@ function editCustName(){
     toast(`이름을 '${nm}'(으)로 바꿨습니다.`); await refresh(true);
   };
 }
-async function openCust(id, replace){ pushNav({v:'detail', id}, replace); S.custId=id; S.view='detail'; await viewDetail(); }
+async function openCust(id, replace){ pushNav({v:'detail', id}, replace); S.custId=id; S.view='detail'; window.scrollTo(0,0); await viewDetail(); window.scrollTo(0,0); }
 function runCheck(entries){
   let rb=0; return entries.map(e=>{
     const counted = e.status==='확정';
@@ -776,7 +776,7 @@ function findCust(text){
 function custHint(c, bal){ if(!c) return '';
   return isOther(c) ? `${c.owner_name||'-'}님 거래처입니다.${bal!=null?` 지금 잔액 ${won(bal)}원에 이어서 계산합니다.`:''}` : (bal!=null?`기존 거래처입니다. 지금 잔액 ${won(bal)}원에 이어서 계산합니다.`:''); }
 // keep=true: 거래처 상세에서 누른 경우만 그 거래처 이름을 미리 채움. 첫 화면에서는 항상 빈칸
-function openEntry(keep){ pushNav({v:'entry', keep:!!keep}); if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); }
+function openEntry(keep){ pushNav({v:'entry', keep:!!keep}); if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); window.scrollTo(0,0); } // 새 화면은 맨 위부터
 function viewEntry(msg, ok){
   app.innerHTML = header('거래 입력', true) + `<div class="wrap"><form id="ef" class="card">
     <label class="f">거래처 (처음 입력하면 자동으로 생성됩니다)</label>
@@ -859,7 +859,7 @@ function openPaste(photo, keep){
   pushNav({v:'paste', photo:!!photo, keep:!!keep});
   if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; (S.photoUrls||[]).forEach(u=>{try{u&&URL.revokeObjectURL(u)}catch(_){}}); S.photoUrls=[];
   S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existList=[]; S.failedPhotos=[]; S.manualRows=false;
-  viewPaste();
+  viewPaste(); window.scrollTo(0,0); // 상세 화면 아래쪽에서 눌러도 맨 위부터
 }
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
 async function shrink(file){
