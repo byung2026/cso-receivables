@@ -49,7 +49,7 @@ header.top .who{font-size:13px;color:var(--mute);white-space:nowrap}
 .btn.ghost{background:var(--chip);color:var(--sub);padding:7px 11px;font-size:13px}
 .btn.danger{background:var(--red-bg);color:var(--red);border:0}
 .btn.sm{padding:7px 12px;font-size:13.5px;border-radius:10px;min-height:40px}
-.btn:disabled{opacity:.5;cursor:default}
+.btn:disabled{background:#E9ECF1;color:#4E5968;cursor:default}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
 .grow{flex:1;min-width:0}
@@ -145,7 +145,10 @@ h2.sh .sp{flex:1}h2.sh .s{font-size:13px;color:var(--mute);font-weight:600}
 .ord{display:flex;gap:12px;align-items:center;padding:13px 2px;border-bottom:1px solid var(--line)}
 .ord .m{flex:1;min-width:0}.ord .t1{font-size:15.5px;font-weight:700;word-break:keep-all;overflow-wrap:break-word}
 .ord .tags .s{font-size:12.5px;color:var(--mute)}.ord .r{text-align:right;font-size:15.5px;font-weight:700;white-space:nowrap}
-.ph{display:flex;align-items:center;gap:10px;padding:12px 2px;border-bottom:1px solid var(--line);font-size:14.5px;flex-wrap:wrap}
+.ph{display:flex;align-items:center;gap:12px;padding:10px 2px;border-bottom:1px solid var(--line);font-size:14.5px}
+.ph .grow{line-height:1.45}.ph b{font-weight:700}
+.pht{flex:0 0 auto;width:44px;height:56px;border-radius:8px;border:1px solid var(--line);background:var(--chip);color:var(--mute);display:grid;place-items:center;overflow:hidden;padding:0;cursor:pointer}
+.pht img{width:100%;height:100%;object-fit:cover;display:block}.pht.off{opacity:.5;cursor:default}
 /* 거래 내역 */
 .ent{border-bottom:1px solid var(--line);padding:12px 2px}
 .ent:last-child{border-bottom:0}
@@ -179,6 +182,7 @@ tr.pend td{background:var(--ylw-bg)} tr.bad td{background:var(--red-bg)}
 .more{display:flex;align-items:center;gap:12px;width:100%;margin-top:12px;padding:8px 0;border:0;background:none;color:var(--mute);font-size:13.5px;font-weight:600;cursor:pointer}
 .more::before,.more::after{content:"";flex:1;border-top:1px solid var(--line)}
 .login{max-width:400px;margin:10vh auto 0;padding:0 16px}
+@media (max-width:560px){.login{min-height:100vh;min-height:100dvh;margin:0 auto;display:flex;flex-direction:column;justify-content:center;padding:24px 16px calc(24px + env(safe-area-inset-bottom))}}
 .login h2{margin:0 0 4px;font-size:24px;font-weight:800}
 .login .logo{width:52px;height:52px;border-radius:16px;background:linear-gradient(135deg,#1E5EF3,#3D7BFF);display:grid;place-items:center;color:#fff;margin-bottom:16px}
 h3{font-size:16px;margin:0 0 10px;font-weight:800}
@@ -213,7 +217,13 @@ h3{font-size:16px;margin:0 0 10px;font-weight:800}
 .pview .pvb{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y pinch-zoom}
 .pview .pvb img{display:block;width:100%;height:auto;margin:0 auto}
 .pview .pvb.z img{width:260%;max-width:none}
-.pzone{margin-top:10px;border:2px dashed #C9D6F2;border-radius:14px;padding:14px;text-align:center;background:#F7FAFF;outline:none}
+.pzd{margin-top:10px}.pzd>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:6px;min-height:44px;border-radius:12px;color:var(--blue);font-weight:700;font-size:14.5px}
+.pzd>summary::-webkit-details-marker{display:none}.pzd>summary::after{content:"▾";font-size:12px}.pzd[open]>summary::after{content:"▴"}
+.pzd[open]>summary{min-height:36px}
+.pwait{display:flex;gap:12px;align-items:center;background:var(--soft);border:1px dashed #C9D6F2;border-radius:14px;padding:16px;margin:10px 0;font-size:14.5px;color:var(--sub);line-height:1.5}
+.pwait svg.ic{width:28px;height:28px;color:var(--blue)}
+.preason{font-size:13px;color:var(--sub);margin-top:6px;text-align:center}
+.pzone{margin-top:6px;border:2px dashed #C9D6F2;border-radius:14px;padding:14px;text-align:center;background:#F7FAFF;outline:none}
 .pzone.on,.pzone:focus{border-color:var(--blue);background:var(--blue-bg)}
 .pzone .pz1{font-weight:800;color:var(--blue);display:flex;align-items:center;justify-content:center;gap:6px}.pzone .pz2{font-size:13px;color:var(--mute);margin-top:4px}
 /* 월말 수금 계산기 (아래에서 올라오는 창) */
@@ -391,8 +401,8 @@ function viewLogin(msg){
   app.innerHTML = `<div class="login">
     <div class="logo">${IC.chart}</div><h2>회전일 차트</h2><div class="muted">받은 아이디(또는 초대받은 이메일)로 로그인하세요.</div>
     <form id="lf" class="card">
-      <label class="f">아이디 또는 이메일</label><input class="i" id="em" type="text" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" required value="${esc(PREF.get('cso_email')||'')}">
-      <label class="f">비밀번호</label><input class="i" id="pw" type="password" autocomplete="current-password" required>
+      <label class="f">아이디 또는 이메일</label><input class="i" id="em" type="text" inputmode="email" autocapitalize="off" autocorrect="off" spellcheck="false" autocomplete="username" placeholder="예: hong01" required value="${esc(PREF.get('cso_email')||'')}">
+      <label class="f">비밀번호</label><input class="i" id="pw" type="password" autocomplete="current-password" placeholder="비밀번호" required>
       <div class="row" style="margin-top:12px;gap:18px">
         <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="saveId" ${saveIdOn()?'checked':''} style="width:18px;height:18px">아이디 저장</label>
         <label class="row" style="gap:6px;cursor:pointer"><input type="checkbox" id="autoLg" ${autoLogin()?'checked':''} style="width:18px;height:18px">자동 로그인</label>
@@ -457,7 +467,7 @@ function custTag(c){ const k=c._s.k, t=c.turnover_days;
   if(k==='none') return `<span class="tag none">미수금 없음</span>`;
   return `<span class="tag ${TONE[bucketOf(c)]||'t-g'}">${t!=null?t+'일':'회전일 미상'}${TAGT[k]&&k!=='none'?' · '+TAGT[k]:''}</span>`; }
 function custSub(c){
-  const parts=[]; if(S.isAdmin) parts.push(esc(c.owner_name||'-'));
+  const parts=[]; if(S.isAdmin && S.ownerFilter==='all') parts.push(esc(c.owner_name||'-')); // 한 사람 것만 볼 때는 담당자 이름 생략
   const bt=blockTxt(c); if(bt) parts.push(bt);
   if(c.last_input){ const ago=dd(todayStr(), c.last_input); parts.push(`<span class="${ago>STALE_DAYS?'old':''}">최근 입력 ${fd(c.last_input)}${ago>STALE_DAYS?` (${ago}일 전)`:''}</span>`); }
   return parts.join(' · ');
@@ -471,7 +481,7 @@ function viewDash(){
   const list = sortList(S.bucket ? base_.filter(inBucket) : base_);
   const sum = (f)=> base_.reduce((a,c)=>a+Number(f(c)||0),0);
   const cnt = (k)=> base_.filter(c=>c._s.k===k).length;
-  const ownerMap = new Map([[S.session.user.id, (S.me?.display_name||'나')+' (나)']]); // 내 이름을 항상 맨 위에
+  const ownerMap = new Map([[S.session.user.id, '나']]); // 내 이름을 항상 맨 위에
   // 담당자 목록: 등록된 동료 전원(거래처 0처 포함, 사용 중지 제외) + 거래처에 있는 담당자, 이름순
   const others = new Map();
   (S.members||[]).filter(m=>m.active!==false && m.user_id!==S.session.user.id).forEach(m=>others.set(m.user_id, m.display_name||'(이름 없음)'));
@@ -479,7 +489,7 @@ function viewDash(){
   [...others.entries()].sort((a,b)=>a[1].localeCompare(b[1],'ko')).forEach(([id,n])=>ownerMap.set(id,n));
   const owners = [...ownerMap.entries()];
   const nBlock=cnt('block'), nSoon=cnt('soon');
-  const ownerName = S.ownerFilter==='all' ? '전체 담당자' : (ownerMap.get(S.ownerFilter)||'').replace(' (나)','');
+  const ownerName = S.ownerFilter==='all' ? '전체 담당자' : (ownerMap.get(S.ownerFilter)||'');
   app.innerHTML = header('회전일 차트') + `<div class="wrap">
     <div class="hero"><div class="k">미수금 현황</div><div class="v">${won(sum(c=>c.balance))}<small>원</small></div>
       <div class="d">기준일 ${fd(S.base)} · 거래처 ${base_.length}처${S.isAdmin?` · ${esc(ownerName)}`:''}</div>
@@ -607,9 +617,11 @@ async function viewDetail(){
     <div class="dist">${DIST.map(bd).join('')}</div>
     <div id="ordCard" style="scroll-margin-top:70px"><h2 class="sh">주문발생 <span class="s">오래된 순 · 남은 미수</span></h2><div id="ordBody">${ordersHtml()}</div></div>
     ${photos.length?`<h2 class="sh">거래장 사진 <span class="s">3개월 보관 후 자동 삭제</span></h2>
-      ${photos.map(p=>{ const up=p.created_at.slice(0,10); const del=addMonths(up,3);
-        return `<div class="ph">${IC.photo}<span class="grow">${md(up)} 올림 <span class="muted">· ${p.purged_at?'삭제됨':`${md(del)} 삭제 예정`}</span></span>
-          ${p.purged_at?'<span class="muted">보관 기간 지남</span>':`<button class="btn sm sec" onclick="viewPhoto('${p.id}')">보기</button>`}</div>`;}).join('')}`:''}
+      ${photos.map(p=>{ const up=p.created_at.slice(0,10); const del=addMonths(up,3); const n=entries.filter(e=>e.photo_id===p.id).length;
+        const th = p.purged_at ? `<span class="pht off">${IC.photo}</span>` : `<button class="pht" data-path="${esc(p.storage_path)}" onclick="viewPhoto('${p.id}')" aria-label="${fd(up)} 사진 보기">${IC.photo}</button>`;
+        return `<div class="ph">${th}<span class="grow"><b>${fd(up)} 올림</b> · ${n?`거래 ${n}건 연결`:'연결된 거래 없음'}
+          <span class="muted" style="display:block">${p.purged_at?'보관 기간(3개월)이 지나 삭제됨':`${fd(del)} 삭제 예정`}</span></span>
+          ${p.purged_at?'':`<button class="btn sm sec" onclick="viewPhoto('${p.id}')">보기</button>`}</div>`;}).join('')}`:''}
     <h2 class="sh">거래 내역<span class="sp"></span><span class="s">최근 순</span></h2>
     <div id="entBody">${entsHtml()}</div>
     ${entries.some(e=>e._mis)?'<div class="err">⚠ 거래장 잔액과 계산 잔액이 다른 행이 있습니다. 빠진 거래나 금액 오타를 확인하세요.</div>':''}
@@ -620,6 +632,7 @@ async function viewDetail(){
     if(error) toast(errMsg(error)); else { toast('담당자를 변경했습니다.'); await refresh(true); }
   }; }
   S.entryCustName = custLabel(c);
+  loadPhotoThumbs();
   // 회전일 칸을 누르면 그 구간의 주문만 보기 (다시 누르면 전체)
   document.querySelectorAll('.bk.tap').forEach(el=>el.onclick=()=>{
     S.detBucket = S.detBucket===el.dataset.bk ? null : el.dataset.bk; S.detBucketLbl = el.dataset.lbl; S.ordN = PAGE;
@@ -635,7 +648,7 @@ function entsHtml(){ // 거래 내역: 최근 10건씩
         const ph = e.photo_id&&S.photoMap[e.photo_id]&&!S.photoMap[e.photo_id].purged_at;
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
         <div class="l1"><span class="ei ${isPay?'p':''}">${isPay?IC.dn:IC.up}</span>
-          <span class="mm"><span class="it">${esc(e.item||e.kind)}</span><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span> · <span class="kd">${e.kind}</span>${ph?` · <span title="사진 보기" style="cursor:pointer;color:var(--blue)" onclick="viewPhoto('${e.photo_id}')">사진</span>`:''}</span>
+          <span class="mm"><span class="it">${esc(e.item||e.kind)}</span><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span>${e.item&&e.item!==e.kind?` · <span class="kd">${e.kind}</span>`:''}${ph?` · <span title="사진 보기" style="cursor:pointer;color:var(--blue)" onclick="viewPhoto('${e.photo_id}')">사진</span>`:''}</span>
           <span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span>
           <button class="emore" aria-label="거래 메뉴" aria-expanded="false" onclick="entMenu(this,'${e.id}')">⋯</button></div>
         <div class="l2"><span>계산 ${e._rb!=null?won(e._rb):'-'}</span>${e.ledger_balance!=null?`<span>거래장 ${won(e.ledger_balance)} ${e._mis?'<b style="color:var(--red)">불일치 ⚠</b>':'<span style="color:var(--grn)">✓</span>'}</span>`:''}
@@ -717,6 +730,15 @@ function calcHtml(c, D, pay){
 }
 function clearBucket(){ S.detBucket=null; S.ordN=PAGE; document.querySelectorAll('.bk').forEach(x=>x.classList.remove('sel')); document.getElementById('ordBody').innerHTML = ordersHtml(); }
 function addMonths(s,n){ const d=new Date(s+'T00:00:00'); d.setMonth(d.getMonth()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+// 거래장 사진 목록의 작은 썸네일 (5분짜리 임시 주소, 실패하면 아이콘 그대로)
+async function loadPhotoThumbs(){
+  const els=[...document.querySelectorAll('.pht[data-path]')]; if(!els.length) return;
+  try{
+    const st=sb.storage.from('ledger-photos'); if(!st.createSignedUrls) return;
+    const {data}=await st.createSignedUrls(els.map(e=>e.dataset.path), 300);
+    (data||[]).forEach((d,i)=>{ if(d && d.signedUrl && els[i].isConnected){ els[i].innerHTML=`<img src="${d.signedUrl}" alt="" loading="lazy">`; } });
+  }catch(_){}
+}
 async function viewPhoto(id){
   const p=(S.photoMap||{})[id]; if(!p) return;
   const w=window.open('', '_blank'); // 팝업 차단 방지: 클릭 순간 창을 먼저 연다
@@ -818,7 +840,7 @@ async function customerIdFor(name, owner){
 function ownerPickHtml(id){
   if(!S.isAdmin) return '';
   const me=S.session.user.id; const list=(S.members||[]).filter(m=>m.active!==false);
-  const opts=[[me,(S.me?.display_name||'나')+' (나)'], ...list.filter(m=>m.user_id!==me).sort((a,b)=>(a.display_name||'').localeCompare(b.display_name||'','ko')).map(m=>[m.user_id,m.display_name])];
+  const opts=[[me,'나'], ...list.filter(m=>m.user_id!==me).sort((a,b)=>(a.display_name||'').localeCompare(b.display_name||'','ko')).map(m=>[m.user_id,m.display_name])];
   return `<div id="${id}" class="ownpick" hidden><label class="f">새 거래처 담당자</label><select class="i" id="${id}Sel">${opts.map(([v,n])=>`<option value="${v}">${esc(n)}</option>`).join('')}</select>
     <div class="muted" style="margin-top:4px">이 거래처를 맡을 사람을 고르세요. 나중에 거래처 화면에서도 바꿀 수 있습니다.</div></div>`;
 }
@@ -836,7 +858,7 @@ const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item
 function openPaste(photo, keep){
   pushNav({v:'paste', photo:!!photo, keep:!!keep});
   if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; (S.photoUrls||[]).forEach(u=>{try{u&&URL.revokeObjectURL(u)}catch(_){}}); S.photoUrls=[];
-  S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existList=[]; S.failedPhotos=[];
+  S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existList=[]; S.failedPhotos=[]; S.manualRows=false;
   viewPaste();
 }
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
@@ -976,9 +998,19 @@ function paintStatus(){
   document.getElementById('msum').innerHTML = `저장할 줄 <b>${save}</b>${bad?` · <span style="color:var(--red)">확인 필요 ${bad}</span>`:''}${skip?` · 저장 안 함 ${skip}`:''}`
     + (nUnc?` · 흐린 줄 ${nUnc}개는 확인대기로 저장`:'') + (nFix?` · 자동 교정 ${nFix}줄`:'')
     + (ev.some(e=>e.state==='mis')?'<div class="muted">불일치 줄은 \'확인대기\'로 저장됩니다.</div>':'');
-  document.getElementById('ps').disabled = !name || !save || ev.some(e=>e.state==='err');
+  const why = !name ? '거래처 이름을 넣으면 저장할 수 있어요.'
+    : ev.some(e=>e.state==='err') ? '빨간 줄의 빈칸을 채우면 저장할 수 있어요.'
+    : !save ? (S.photoMode ? '사진을 올리거나 줄을 채우면 저장할 수 있어요.' : '줄을 하나 이상 채우면 저장할 수 있어요.') : '';
+  document.getElementById('ps').disabled = !!why;
+  const pr=document.getElementById('preason'); if(pr) pr.textContent = why;
 }
-function renderRows(){ document.getElementById('rows').innerHTML = S.rows.map(rowHtml).join(''); paintStatus(); }
+// 사진으로 입력 화면에서 아직 사진·입력이 없으면 빈 1번 줄 대신 안내만 보여 줌 ([+ 줄 추가]를 누르면 직접 입력)
+const photoWaiting = ()=> S.photoMode && !S.manualRows && !(S.photoIds||[]).some(Boolean) && S.rows.every(isBlank);
+function renderRows(){
+  document.getElementById('rows').innerHTML = photoWaiting()
+    ? `<div class="pwait">${IC.photo}<div>사진을 올리면 읽은 거래가 여기에 채워집니다.<br><span class="muted">직접 입력하려면 아래 [+ 줄 추가]를 누르세요.</span></div></div>`
+    : S.rows.map(rowHtml).join('');
+  paintStatus(); }
 async function loadStartBal(){
   const name=pc.value.trim(); const ex = findCust(name);
   S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existList=[];
@@ -995,9 +1027,10 @@ function viewPaste(){
     <div id="mstart" class="muted" style="margin-top:6px"></div>
     ${ownerPickHtml('ownP')}
     <label class="btn ${S.photoMode?'':'sec'}" style="display:block;text-align:center;margin-top:12px">${IC.cam} 거래장 사진으로 채우기<input type="file" id="pf" accept="image/*" multiple hidden></label>
-    <div id="pzone" class="pzone" tabindex="0"><div class="pz1">${IC.photo} 캡처한 이미지 붙여넣기</div>
+    <details class="pzd" ${matchMedia('(pointer:fine)').matches?'open':''}><summary>${IC.photo} 캡처한 이미지 붙여넣기</summary>
+    <div id="pzone" class="pzone" tabindex="0">
       <div class="pz2">${matchMedia('(pointer:fine)').matches?'캡처 후 <b>Ctrl+V</b> (맥은 ⌘+V) 또는 이미지를 여기로 끌어다 놓기':'캡처한 이미지를 복사한 뒤 아래 버튼을 누르세요'}</div>
-      <button type="button" class="btn sm sec" id="pclip" style="margin-top:8px">클립보드에서 붙여넣기</button></div>
+      <button type="button" class="btn sm sec" id="pclip" style="margin-top:8px">클립보드에서 붙여넣기</button></div></details>
     <div id="pthumbs" class="pthumbs"></div>
     <div id="pst" class="muted" style="margin-top:6px">여러 장이면 위에서부터 찍은 순서대로 고르세요. 읽은 결과가 아래 표에 채워지고, 틀린 칸만 고치면 됩니다.</div>
   </div>
@@ -1005,7 +1038,7 @@ function viewPaste(){
   <button type="button" class="btn sec" id="addRow" style="width:100%">+ 줄 추가</button>
   <div class="muted" style="margin-top:8px">PC에서는 엑셀 표(일자·구분·금액·품목·거래장잔액)를 복사해 아무 칸에나 붙여넣으면 줄이 자동으로 채워집니다.</div>
   <div class="card" style="position:sticky;bottom:0;margin-bottom:0"><div id="msum" class="muted"></div>
-    <button class="btn" id="ps" style="width:100%;margin-top:8px" disabled>모두 저장</button><div id="perr" class="err"></div></div>
+    <button class="btn" id="ps" style="width:100%;margin-top:8px" disabled>모두 저장</button><div id="preason" class="preason"></div><div id="perr" class="err"></div></div>
   </div>`;
   renderRows(); paintThumbs();
   pc.onchange = loadStartBal; pc.oninput = ()=>{ paintStatus(); syncOwnerPick('ownP', pc.value); };
@@ -1036,7 +1069,8 @@ function viewPaste(){
     while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
     S.rows.push(...add); markExisting(); renderRows(); toast(`${add.length}줄을 채웠습니다.`);
   });
-  addRow.onclick = ()=>{ const last=S.rows[S.rows.length-1]; S.rows.push(blankRow(last&&last.date)); renderRows();
+  addRow.onclick = ()=>{ if(photoWaiting()){ S.manualRows=true; renderRows(); document.querySelector('#rows .mrow')?.scrollIntoView({block:'center'}); return; }
+    const last=S.rows[S.rows.length-1]; S.rows.push(blankRow(last&&last.date)); renderRows();
     const els=document.querySelectorAll('#rows .mrow'); els[els.length-1].scrollIntoView({block:'center'}); };
   pf.onchange = async ()=>{ const files=[...pf.files]; pf.value=''; await handlePhotoFiles(files); };
   // 캡처 이미지 붙여넣기: Ctrl+V(화면 어디서든), 끌어다 놓기, [클립보드에서 붙여넣기] 버튼
