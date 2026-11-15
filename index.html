@@ -194,6 +194,18 @@ h3{font-size:16px;margin:0 0 10px;font-weight:800}
 .seg button{flex:1 1 auto;border:0;background:transparent;padding:9px 6px;cursor:pointer;white-space:nowrap;border-radius:9px;font-weight:600;color:var(--sub)}
 .seg button.on{background:#fff;color:var(--blue);font-weight:800;box-shadow:0 1px 3px rgba(16,24,40,.12)}
 /* 캡처 이미지 붙여넣기 칸 */
+.pthumbs{display:flex;gap:8px;overflow-x:auto;margin-top:10px;padding-bottom:2px}
+.pthumbs button{position:relative;flex:0 0 auto;width:64px;height:84px;border:1px solid var(--line,#E4E7EC);border-radius:10px;padding:0;overflow:hidden;background:#fff;cursor:pointer}
+.pthumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.pthumbs b{position:absolute;left:4px;bottom:4px;background:rgba(16,24,40,.75);color:#fff;font-size:11px;border-radius:6px;padding:1px 5px}
+.phchip{border:0;background:var(--blue-bg,#EAF1FF);color:var(--blue);font-weight:700;font-size:12px;border-radius:8px;padding:3px 8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px}
+.pview{position:fixed;inset:0;z-index:60;background:#0B0F19;display:flex;flex-direction:column}
+.pview .pvh{display:flex;align-items:center;gap:8px;padding:calc(8px + env(safe-area-inset-top)) 12px 8px;color:#fff}
+.pview .pvh b{flex:1;font-size:15px}
+.pview .pvh button{border:0;background:rgba(255,255,255,.14);color:#fff;border-radius:10px;padding:8px 12px;font-size:14px;cursor:pointer}
+.pview .pvb{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;touch-action:pan-x pan-y pinch-zoom}
+.pview .pvb img{display:block;width:100%;height:auto;margin:0 auto}
+.pview .pvb.z img{width:260%;max-width:none}
 .pzone{margin-top:10px;border:2px dashed #C9D6F2;border-radius:14px;padding:14px;text-align:center;background:#F7FAFF;outline:none}
 .pzone.on,.pzone:focus{border-color:var(--blue);background:var(--blue-bg)}
 .pzone .pz1{font-weight:800;color:var(--blue);display:flex;align-items:center;justify-content:center;gap:6px}.pzone .pz2{font-size:13px;color:var(--mute);margin-top:4px}
@@ -802,7 +814,7 @@ async function ledgerCheck(cid, lbv){
 const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item:'', lb:null, flag:'', skip:false});
 function openPaste(photo, keep){
   pushNav({v:'paste', photo:!!photo, keep:!!keep});
-  if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[];
+  if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; (S.photoUrls||[]).forEach(u=>{try{URL.revokeObjectURL(u)}catch(_){}}); S.photoUrls=[];
   S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existKeys=new Set();
   viewPaste();
 }
@@ -826,12 +838,12 @@ async function readPhotos(files, onStatus){
     const path=`${uid}/${Date.now()}-${n}.jpg`;
     const up=await sb.storage.from('ledger-photos').upload(path, blob, {contentType:'image/jpeg'}); if(up.error) throw up.error;
     const ph=await sb.from('photos').insert({storage_path:path}).select('id').single(); if(ph.error) throw ph.error;
-    S.photoIds.push(ph.data.id);
+    S.photoIds.push(ph.data.id); S.photoUrls.push(URL.createObjectURL(blob)); const gi=S.photoIds.length-1; // 이 사진의 번호(입력 화면 전체 기준)
     onStatus(`${n+1}/${files.length}장 읽는 중... (10~30초)`);
     const {data, error}=await sb.functions.invoke('read-ledger',{body:{photo_id:ph.data.id}});
     if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} throw new Error(m); }
     if(!name && data.customer_name) name=data.customer_name;
-    all.push(...data.rows.map(r=>({...r, _photo:n, _model:data.model})));
+    all.push(...data.rows.map(r=>({...r, _photo:gi, _model:data.model})));
   }
   // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액 같고, 잔액이 있으면 잔액도 같음)은 중복 의심 → 기본 '저장 안 함'
   //  주문현황·수금현황처럼 잔액 칸이 없는 화면도 날짜·구분·금액으로 잡아냄 (같은 사진 안의 같은 줄은 중복으로 보지 않음)
@@ -840,7 +852,7 @@ async function readPhotos(files, onStatus){
     const dup = firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
     if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
     const flag = dup?'dup': r.unclear?'unc':'';
-    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag, fixed:r.fixed||false}; });
+    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag, fixed:r.fixed||false, ph:r._photo}; });
   return {name, rows, models:[...new Set(all.map(r=>r._model))]};
 }
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품','할인':'매출할인','매출할인':'매출할인'};
@@ -896,7 +908,7 @@ function evalRows(){
 function rowHtml(r,i){
   const fmt = v => v==null||v===''?'':Number(v).toLocaleString('ko-KR');
   return `<div class="mrow" data-i="${i}">
-    <div class="mhead"><b>${i+1}</b>
+    <div class="mhead"><b>${i+1}</b>${r.ph!=null&&S.photoUrls?.[r.ph]?`<button type="button" class="phchip" data-ph="${r.ph}" aria-label="사진 ${r.ph+1} 보기">${IC.photo}사진 ${r.ph+1}</button>`:''}
       ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'||r.flag==='carry'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':r.flag==='carry'?'기존 거래처라 이월 제외':'사진 글자가 흐림'})</span></label>`:''}
       <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
     <div class="mgrid">
@@ -943,6 +955,7 @@ function viewPaste(){
     <div id="pzone" class="pzone" tabindex="0"><div class="pz1">${IC.photo} 캡처한 이미지 붙여넣기</div>
       <div class="pz2">${matchMedia('(pointer:fine)').matches?'캡처 후 <b>Ctrl+V</b> (맥은 ⌘+V) 또는 이미지를 여기로 끌어다 놓기':'캡처한 이미지를 복사한 뒤 아래 버튼을 누르세요'}</div>
       <button type="button" class="btn sm sec" id="pclip" style="margin-top:8px">클립보드에서 붙여넣기</button></div>
+    <div id="pthumbs" class="pthumbs"></div>
     <div id="pst" class="muted" style="margin-top:6px">여러 장이면 위에서부터 찍은 순서대로 고르세요. 읽은 결과가 아래 표에 채워지고, 틀린 칸만 고치면 됩니다.</div>
   </div>
   <div id="rows"></div>
@@ -951,7 +964,7 @@ function viewPaste(){
   <div class="card" style="position:sticky;bottom:0;margin-bottom:0"><div id="msum" class="muted"></div>
     <button class="btn" id="ps" style="width:100%;margin-top:8px" disabled>모두 저장</button><div id="perr" class="err"></div></div>
   </div>`;
-  renderRows();
+  renderRows(); paintThumbs();
   pc.onchange = loadStartBal; pc.oninput = ()=>{ paintStatus(); syncOwnerPick('ownP', pc.value); };
   if(pc.value) loadStartBal(); // 상세 화면에서 열면 거래처가 미리 채워짐
   const box = document.getElementById('rows');
@@ -970,6 +983,7 @@ function viewPaste(){
     paintStatus();
   });
   box.addEventListener('click', e=>{
+    const c=e.target.closest('[data-ph]'); if(c){ openPhotoView(+c.dataset.ph); return; }
     const b=e.target.closest('[data-del]'); if(!b) return; S.rows.splice(+b.dataset.del,1); if(!S.rows.length) S.rows.push(blankRow()); renderRows();
   });
   // 엑셀에서 복사한 여러 칸/여러 줄을 붙여넣으면 표로 채움
@@ -1005,8 +1019,8 @@ function viewPaste(){
       if(!pc.value.trim() && r.name){ pc.value=r.name; await loadStartBal(); }
       while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
       S.rows.push(...r.rows); if(!S.rows.length) S.rows.push(blankRow());
-      S.photoMode=true; markExisting(); renderRows();
-      st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 빨간 줄만 사진과 대조해서 고치세요.`;
+      S.photoMode=true; markExisting(); renderRows(); paintThumbs();
+      st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 빨간 줄만 사진과 대조해서 고치세요. 위 사진이나 줄의 [사진] 단추를 누르면 크게 볼 수 있어요.`;
     }catch(e){ st.className='err'; st.textContent='사진 읽기 실패: '+errMsg(e); }
   }
   S.onPasteImages = handlePhotoFiles;
@@ -1017,14 +1031,38 @@ function viewPaste(){
       const ins = S.rows.map((r,i)=>({r, e:ev[i]})).filter(x=>x.e.state==='ok'||x.e.state==='mis').map(({r,e})=>({
         customer_id:cid, kind:r.kind, entry_date:r.date||null, item:r.item||null,
         sale_amount: isCredit(r.kind)?0:r.amt, pay_amount: isCredit(r.kind)?r.amt:0, ledger_balance:r.lb,
-        input_method: S.photoMode?'사진':'엑셀', photo_id: S.photoIds[0]||null, status: e.state==='mis'?'확인대기':'확정'}));
-      for(const row of ins){ const {error}=await sb.from('entries').insert(row); if(error) throw error; } // 한 줄씩 넣어 순서 보존
+        input_method: S.photoMode?'사진':'엑셀', photo_id: (r.ph!=null && S.photoIds[r.ph]) || null, status: e.state==='mis'?'확인대기':'확정'}));
+      // 한 번에 저장: 전부 들어가거나 하나도 안 들어감 → 실패 후 다시 눌러도 중복 없음 (입력 순서대로 번호가 매겨짐)
+      if(ins.length){ const {error}=await sb.from('entries').insert(ins); if(error) throw error; }
       if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
       S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash');
     }catch(er){ perr.textContent=errMsg(er); ps.disabled=false; }
   };
 }
+
+// ===== 입력 화면: 올린 사진 보기 =====
+function paintThumbs(){
+  const el=document.getElementById('pthumbs'); if(!el) return; const u=S.photoUrls||[];
+  el.innerHTML = u.map((x,i)=>`<button type="button" onclick="openPhotoView(${i})" aria-label="사진 ${i+1} 크게 보기"><img src="${x}" alt=""><b>${i+1}</b></button>`).join('');
+  el.style.display = u.length?'flex':'none';
+}
+function openPhotoView(i){
+  const u=S.photoUrls||[]; if(!u[i]) return; closePhotoView(true);
+  try{ history.pushState({...(history.state||{}), sheet:1}, ''); }catch(_){}
+  const v=document.createElement('div'); v.id='photoView'; v.className='pview'; v.setAttribute('role','dialog');
+  v.innerHTML=`<div class="pvh">${u.length>1?`<button type="button" data-go="-1" aria-label="이전 사진">‹</button>`:''}<b>사진 ${i+1} / ${u.length}</b>${u.length>1?`<button type="button" data-go="1" aria-label="다음 사진">›</button>`:''}<button type="button" data-z>확대</button><button type="button" data-x aria-label="닫기">✕</button></div>
+    <div class="pvb"><img src="${u[i]}" alt="거래장 사진 ${i+1}"></div>`;
+  v.onclick=e=>{ const t=e.target.closest('button');
+    if(e.target.tagName==='IMG'||(t&&t.hasAttribute('data-z'))){ const b=v.querySelector('.pvb'); b.classList.toggle('z'); v.querySelector('[data-z]').textContent=b.classList.contains('z')?'맞춤':'확대'; return; }
+    if(!t) return;
+    if(t.hasAttribute('data-x')) closePhotoView();
+    else if(t.dataset.go){ const n=(i+Number(t.dataset.go)+u.length)%u.length; i=n; v.querySelector('.pvb img').src=u[n]; v.querySelector('.pvh b').textContent=`사진 ${n+1} / ${u.length}`; v.querySelector('.pvb').scrollTo(0,0); }
+  };
+  document.body.appendChild(v);
+}
+function closePhotoView(silent){ const v=document.getElementById('photoView'); if(!v) return;
+  if(!silent && history.state && history.state.sheet) history.back(); else v.remove(); }
 
 // ===== 엑셀 내려받기 (거래처 요약) =====
 // 관리자: 전체 / 담당자별로 골라서 받기. 동료: 본인 거래처만 (서버 권한상 본인 것만 불러와짐)
@@ -1267,6 +1305,7 @@ document.addEventListener('paste', e=>{
 window.addEventListener('popstate', async e=>{
   if(!S.session || !S.me) return;
   if(document.getElementById('calcSheet')){ document.getElementById('calcSheet').remove(); return; } // 계산기 창 닫기
+  if(document.getElementById('photoView')){ document.getElementById('photoView').remove(); return; } // 사진 보기 닫기
   closeMenu();
   const st = e.state || {v:'dash'}; NAV_POP = true;
   try{
