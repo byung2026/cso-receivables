@@ -202,11 +202,12 @@ Deno.serve(async (req) => {
       } catch (_) { /* 재시도 실패 시 Haiku 결과 유지 */ }
     }
 
-    await sb.from("photos").update({
+    const { error: ue } = await sb.from("photos").update({
       read_model: used,
       read_result: { customer_name: result.customer_name, rows: result.rows, notes: result.notes ?? "", bad },
       status: "읽기완료",
     }).eq("id", photo_id);
+    if (ue) console.error("photos update failed", photo_id, ue.message); // 읽은 결과는 그대로 돌려주고, 기록 실패만 서버 로그에 남김
 
     return json({ model: used, customer_name: result.customer_name, rows: result.rows, bad, notes: result.notes ?? "" });
   } catch (e) {

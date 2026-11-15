@@ -815,7 +815,7 @@ const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item
 function openPaste(photo, keep){
   pushNav({v:'paste', photo:!!photo, keep:!!keep});
   if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; (S.photoUrls||[]).forEach(u=>{try{URL.revokeObjectURL(u)}catch(_){}}); S.photoUrls=[];
-  S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existKeys=new Set();
+  S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existList=[]; S.failedPhotos=[];
   viewPaste();
 }
 // 사진 축소 (긴 변 2400px, JPEG) → 업로드 용량·읽기 비용 절감
@@ -830,30 +830,41 @@ async function shrink(file){
   } finally { URL.revokeObjectURL(url); }
 }
 // 사진 → 서버에서 읽기 → 표의 줄로 변환
-async function readPhotos(files, onStatus){
-  const uid=S.session.user.id; const all=[]; let name='';
-  for(let n=0;n<files.length;n++){
-    onStatus(`${n+1}/${files.length}장 올리는 중...`);
-    const blob=await shrink(files[n]);
-    const path=`${uid}/${Date.now()}-${n}.jpg`;
-    const up=await sb.storage.from('ledger-photos').upload(path, blob, {contentType:'image/jpeg'}); if(up.error) throw up.error;
-    const ph=await sb.from('photos').insert({storage_path:path}).select('id').single(); if(ph.error) throw ph.error;
-    S.photoIds.push(ph.data.id); S.photoUrls.push(URL.createObjectURL(blob)); const gi=S.photoIds.length-1; // 이 사진의 번호(입력 화면 전체 기준)
-    onStatus(`${n+1}/${files.length}장 읽는 중... (10~30초)`);
-    const {data, error}=await sb.functions.invoke('read-ledger',{body:{photo_id:ph.data.id}});
-    if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} throw new Error(m); }
-    if(!name && data.customer_name) name=data.customer_name;
-    all.push(...data.rows.map(r=>({...r, _photo:gi, _model:data.model})));
+// items: 새 파일(File) 또는 이미 올렸지만 읽기에 실패한 사진 {gi} → 사진마다 따로 처리해서 한 장이 실패해도 나머지 결과는 살림
+async function readPhotos(items, onStatus){
+  const uid=S.session.user.id; const all=[]; let name=''; const failed=[]; const done=[];
+  for(let n=0;n<items.length;n++){
+    const it=items[n]; let gi = it instanceof File ? null : it.gi;
+    try{
+      if(gi==null){
+        onStatus(`${n+1}/${items.length}장 올리는 중...`);
+        const blob=await shrink(it);
+        const path=`${uid}/${Date.now()}-${n}.jpg`;
+        const up=await sb.storage.from('ledger-photos').upload(path, blob, {contentType:'image/jpeg'}); if(up.error) throw up.error;
+        const ph=await sb.from('photos').insert({storage_path:path}).select('id').single(); if(ph.error) throw ph.error;
+        S.photoIds.push(ph.data.id); S.photoUrls.push(URL.createObjectURL(blob)); gi=S.photoIds.length-1; // 이 사진의 번호(입력 화면 전체 기준)
+      }
+      onStatus(`${n+1}/${items.length}장 읽는 중... (10~30초)`);
+      const {data, error}=await sb.functions.invoke('read-ledger',{body:{photo_id:S.photoIds[gi]}});
+      if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} throw new Error(m); }
+      if(!name && data.customer_name) name=data.customer_name;
+      all.push(...data.rows.map(r=>({...r, _photo:gi, _model:data.model}))); done.push(gi);
+    }catch(e){
+      // 올리기 전에 실패 → 파일을 다시 올려야 함 / 올린 뒤 읽기만 실패 → 다시 읽기만 하면 됨
+      failed.push({item: gi==null ? it : {gi}, label: gi==null ? `${n+1}번째 사진` : `사진 ${gi+1}`, msg: errMsg(e)});
+    }
   }
   // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액 같고, 잔액이 있으면 잔액도 같음)은 중복 의심 → 기본 '저장 안 함'
   //  주문현황·수금현황처럼 잔액 칸이 없는 화면도 날짜·구분·금액으로 잡아냄 (같은 사진 안의 같은 줄은 중복으로 보지 않음)
-  const firstPhoto = {};
-  const rows = all.map(r=>{ const key=[r.date,r.kind,r.amount,r.balance??''].join('|');
+  const firstPhoto = {}; const keyOf=(d,k,a,b)=>[d||'',k,a,b??''].join('|');
+  (S.rows||[]).forEach(r=>{ if(r.ph!=null){ const k=keyOf(r.date,r.kind,r.amt,r.lb); if(firstPhoto[k]==null) firstPhoto[k]=r.ph; } }); // 앞서 읽은 사진들과도 비교 (다시 읽기 때)
+  const rows = all.map(r=>{ const key=keyOf(r.date,r.kind,r.amount,r.balance);
     const dup = firstPhoto[key]!=null && firstPhoto[key]!==r._photo;
     if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
-    const flag = dup?'dup': r.unclear?'unc':'';
-    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag, skip:!!flag, fixed:r.fixed||false, ph:r._photo}; });
-  return {name, rows, models:[...new Set(all.map(r=>r._model))]};
+    const unc = !!r.unclear;
+    // 흐린 줄은 빼지 않고 저장하되 '확인대기'로 (실제 거래가 조용히 빠지는 것 방지). 겹친 중복만 기본 '저장 안 함'
+    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag: dup?'dup':unc?'unc':'', dup, unc, skip:dup, fixed:r.fixed||false, ph:r._photo}; });
+  return {name, rows, failed, done, models:[...new Set(all.map(r=>r._model))]};
 }
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품','할인':'매출할인','매출할인':'매출할인'};
 function parseDate(s){ s=(s||'').trim(); if(!s) return null; const m=s.replace(/[./년월]/g,'-').replace(/일/,'').match(/^(\d{2,4})-(\d{1,2})-(\d{1,2})/);
@@ -871,16 +882,22 @@ function parsePaste(txt){
 }
 const isBlank = r => !r.amt && !r.item && r.lb==null;
 const entryKey = (d,k,a)=> [d||'', k, Number(a)||0].join('|');
-// 이 거래처에 이미 저장된 거래와 날짜·구분·금액이 같은 줄 → '이미 저장된 거래'로 표시하고 기본 '저장 안 함'
+// 이 거래처에 이미 저장된 거래와 같은 줄 → '이미 저장된 거래'로 표시하고 기본 '저장 안 함'
+//  양쪽에 거래장 잔액이 있으면 날짜·구분·금액·잔액까지 비교, 없으면 날짜·구분·금액으로 비교
+//  저장된 거래 1건은 사진 줄 1개와만 짝지음 → 같은 날 같은 금액 주문이 두 번이면 두 번째는 새 거래로 남음
 function markExisting(){
-  const ex = S.existKeys||new Set(); let changed=false;
-  const hasPrev = ex.size>0; // 이미 거래가 있는 거래처
+  const pool = (S.existList||[]).map(e=>({...e, used:false})); let changed=false;
+  const hasPrev = pool.length>0; // 이미 거래가 있는 거래처
+  const base = r => r.dup?'dup': r.unc?'unc':'';
+  const setFlag = (r, f, skip)=>{ if(r.flag!==f){ r.flag=f; r.skip=skip; changed=true; } };
   S.rows.forEach(r=>{ if(isBlank(r)) return;
     // 기존 거래처에 새 거래장을 올리면 맨 위 '전기이월'은 이미 반영된 잔액 → 기본 '저장 안 함' (처음 등록하는 거래처는 그대로 저장)
-    if(r.kind==='이월' && hasPrev){ if(r.flag!=='carry'){ r.flag='carry'; r.skip=true; changed=true; } return; }
-    if(r.flag==='carry'){ r.flag=''; r.skip=false; changed=true; }
-    if(ex.has(entryKey(r.date, r.kind, r.amt))){ if(r.flag!=='exist'){ r.flag='exist'; r.skip=true; changed=true; } }
-    else if(r.flag==='exist'){ r.flag=''; r.skip=false; changed=true; } });
+    if(r.kind==='이월' && hasPrev){ setFlag(r,'carry',true); return; }
+    if(r.flag==='carry'){ setFlag(r, base(r), !!r.dup); }
+    const k=entryKey(r.date, r.kind, r.amt);
+    const m = (r.lb!=null && pool.find(e=>!e.used && e.k===k && e.lb===r.lb)) || pool.find(e=>!e.used && e.k===k && (r.lb==null || e.lb==null));
+    if(m){ m.used=true; setFlag(r,'exist',true); }
+    else if(r.flag==='exist'){ setFlag(r, base(r), !!r.dup); } });
   return changed;
 }
 function isCredit(k){ return k==='수금' || k==='반품' || k==='매출할인'; } // 가장 오래된 미수부터 차감
@@ -909,7 +926,7 @@ function rowHtml(r,i){
   const fmt = v => v==null||v===''?'':Number(v).toLocaleString('ko-KR');
   return `<div class="mrow" data-i="${i}">
     <div class="mhead"><b>${i+1}</b>${r.ph!=null&&S.photoUrls?.[r.ph]?`<button type="button" class="phchip" data-ph="${r.ph}" aria-label="사진 ${r.ph+1} 보기">${IC.photo}사진 ${r.ph+1}</button>`:''}
-      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'||r.flag==='carry'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':r.flag==='carry'?'기존 거래처라 이월 제외':'사진 글자가 흐림'})</span></label>`:''}
+      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'||r.flag==='carry'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':r.flag==='carry'?'기존 거래처라 이월 제외':'사진 글자가 흐림 · 확인대기로 저장'})</span></label>`:''}
       <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
     <div class="mgrid">
       <label>일자<input class="i" type="date" data-f="date" value="${r.date||''}"></label>
@@ -938,9 +955,9 @@ function paintStatus(){
 function renderRows(){ document.getElementById('rows').innerHTML = S.rows.map(rowHtml).join(''); paintStatus(); }
 async function loadStartBal(){
   const name=pc.value.trim(); const ex = findCust(name);
-  S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existKeys=new Set();
+  S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existList=[];
   if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id);
-    (data||[]).forEach(e=>S.existKeys.add(entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount)));
+    S.existList=(data||[]).map(e=>({k:entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount), lb:e.ledger_balance??null}));
     const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
   if(markExisting()) renderRows(); // 표시가 바뀐 줄이 있을 때만 다시 그림 (입력 중인 칸 보호)
   document.getElementById('mstart').textContent = ex ? custHint(ex, S.startBal) : (name?'새 거래처로 만들어집니다.':''); syncOwnerPick('ownP', name);
@@ -1018,9 +1035,20 @@ function viewPaste(){
       const r=await readPhotos(files, m=>st.textContent=m);
       if(!pc.value.trim() && r.name){ pc.value=r.name; await loadStartBal(); }
       while(S.rows.length && isBlank(S.rows[S.rows.length-1])) S.rows.pop();
-      S.rows.push(...r.rows); if(!S.rows.length) S.rows.push(blankRow());
-      S.photoMode=true; markExisting(); renderRows(); paintThumbs();
-      st.className='ok'; st.textContent=`${files.length}장 읽기 완료 (${r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ')}). 빨간 줄만 사진과 대조해서 고치세요. 위 사진이나 줄의 [사진] 단추를 누르면 크게 볼 수 있어요.`;
+      // 사진 순서대로 끼워 넣기 (다시 읽은 앞쪽 사진의 줄이 뒤 사진 줄보다 뒤로 가지 않게)
+      const byPh={}; r.rows.forEach(x=>(byPh[x.ph]=byPh[x.ph]||[]).push(x));
+      Object.keys(byPh).map(Number).sort((a,b)=>a-b).forEach(ph=>{ let at=S.rows.findIndex(x=>x.ph!=null && x.ph>ph); if(at<0) at=S.rows.length; S.rows.splice(at,0,...byPh[ph]); });
+      if(!S.rows.length) S.rows.push(blankRow());
+      S.failedPhotos = r.failed;
+      if(r.done.length) S.photoMode=true; markExisting(); renderRows(); paintThumbs();
+      const ok=r.done.length, models=r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ');
+      if(!r.failed.length){ st.className='ok'; st.textContent=`${ok}장 읽기 완료 (${models}). 빨간 줄만 사진과 대조해서 고치세요. 위 사진이나 줄의 [사진] 단추를 누르면 크게 볼 수 있어요.`; }
+      else {
+        st.className='err';
+        st.innerHTML=`${files.length}장 중 ${ok}장 읽기 완료${ok?` (${models})`:''} · <b>${r.failed.length}장 실패</b><br>`+r.failed.map(f=>`${esc(f.label)}: ${esc(f.msg)}`).join('<br>')
+          +`<br><button type="button" class="btn sm" id="pretry" style="margin-top:8px">실패한 사진 다시 읽기</button>`;
+        document.getElementById('pretry').onclick=()=>{ const items=S.failedPhotos.map(f=>f.item); S.failedPhotos=[]; handlePhotoFiles(items); };
+      }
     }catch(e){ st.className='err'; st.textContent='사진 읽기 실패: '+errMsg(e); }
   }
   S.onPasteImages = handlePhotoFiles;
@@ -1031,11 +1059,13 @@ function viewPaste(){
       const ins = S.rows.map((r,i)=>({r, e:ev[i]})).filter(x=>x.e.state==='ok'||x.e.state==='mis').map(({r,e})=>({
         customer_id:cid, kind:r.kind, entry_date:r.date||null, item:r.item||null,
         sale_amount: isCredit(r.kind)?0:r.amt, pay_amount: isCredit(r.kind)?r.amt:0, ledger_balance:r.lb,
-        input_method: S.photoMode?'사진':'엑셀', photo_id: (r.ph!=null && S.photoIds[r.ph]) || null, status: e.state==='mis'?'확인대기':'확정'}));
+        input_method: S.photoMode?'사진':'엑셀', photo_id: (r.ph!=null && S.photoIds[r.ph]) || null, status: (e.state==='mis'||r.flag==='unc')?'확인대기':'확정'}));
       // 한 번에 저장: 전부 들어가거나 하나도 안 들어감 → 실패 후 다시 눌러도 중복 없음 (입력 순서대로 번호가 매겨짐)
       if(ins.length){ const {error}=await sb.from('entries').insert(ins); if(error) throw error; }
-      if(S.photoIds.length) await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
-      S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.`);
+      let phWarn='';
+      if(S.photoIds.length){ const {error:pe}=await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
+        if(pe) phWarn=' (사진 상태 기록은 실패했어요. 거래는 저장됐습니다)'; } // 거래 저장은 끝났으니 다시 누르지 않게 성공으로 처리
+      S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.${phWarn}`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash');
     }catch(er){ perr.textContent=errMsg(er); ps.disabled=false; }
   };
