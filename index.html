@@ -17,10 +17,10 @@
 <style>
 /* ===== 블루 포커스 디자인 (2026-11) ===== */
 :root{
-  --bg:#fff; --soft:#F4F6FA; --card:#fff; --ink:#191F28; --sub:#4E5968; --mute:#8B95A1; --line:#EEF0F4;
+  --bg:#fff; --soft:#F4F6FA; --card:#fff; --ink:#191F28; --sub:#4E5968; --mute:#6B7684; --line:#EEF0F4;
   --blue:#1E5EF3; --blue2:#3D7BFF; --blue-bg:#EAF1FF;
   --brand:#1E5EF3; --brand2:#1E5EF3;
-  --red:#D92D20; --red-bg:#FEECEB; --org:#C4610A; --org-bg:#FFF1E0;
+  --red:#B42318; --red-bg:#FEECEB; --org:#A64F00; --org-bg:#FFF1E0;
   --grn:#16A34A; --grn-bg:#E7F6EC; --gry:#6B7684; --gry-bg:#F2F4F6; --ylw-bg:#FFF8DB; --chip:#F2F4F6;
 }
 *{box-sizing:border-box}
@@ -37,7 +37,7 @@ header.top{position:sticky;top:0;z-index:10;background:rgba(255,255,255,.96);bac
 header.top .in{max-width:860px;margin:0 auto;display:flex;align-items:center;gap:6px;padding:0 4px}
 header.top h1{font-size:18px;font-weight:800;margin:0;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 header.top .who{font-size:13px;color:var(--mute);white-space:nowrap}
-.ib{width:38px;height:38px;border-radius:50%;display:grid;place-items:center;background:var(--chip);color:var(--sub);border:0;cursor:pointer;flex:0 0 auto;font-weight:800;font-size:14px}
+.ib{width:44px;height:44px;border-radius:50%;display:grid;place-items:center;background:var(--chip);color:var(--sub);border:0;cursor:pointer;flex:0 0 auto;font-weight:800;font-size:14px}
 .ib.plain{background:none}.ib.av{background:var(--blue-bg);color:var(--blue)}
 .back{background:none;border:0;color:var(--ink);padding:4px 2px 4px 0;cursor:pointer;display:grid;place-items:center}
 .back svg.ic{width:24px;height:24px}
@@ -48,7 +48,7 @@ header.top .who{font-size:13px;color:var(--mute);white-space:nowrap}
 .btn.sec{background:var(--blue-bg);color:var(--blue);border:0}
 .btn.ghost{background:var(--chip);color:var(--sub);padding:7px 11px;font-size:13px}
 .btn.danger{background:var(--red-bg);color:var(--red);border:0}
-.btn.sm{padding:7px 11px;font-size:13px;border-radius:10px}
+.btn.sm{padding:7px 12px;font-size:13.5px;border-radius:10px;min-height:40px}
 .btn:disabled{opacity:.5;cursor:default}
 .card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:16px;margin:12px 0}
 .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
@@ -88,7 +88,7 @@ textarea.i{min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:1
 .hero .two{display:flex;justify-content:space-between;align-items:flex-end;gap:10px;margin-top:6px}
 .chips{display:flex;gap:6px;margin:12px 0 2px;flex-wrap:nowrap}
 .chips .chipsel{flex:1 1 0;min-width:0}.chips .chipsel select,.chips .chipsel input{flex:1;width:100%;max-width:none}
-.chipsel{display:inline-flex;align-items:center;gap:5px;background:var(--chip);border:0;border-radius:10px;padding:0 10px;height:38px;font-size:14px;font-weight:600;color:var(--sub);max-width:100%}
+.chipsel{display:inline-flex;align-items:center;gap:5px;background:var(--chip);border:0;border-radius:10px;padding:0 10px;height:44px;font-size:14px;font-weight:600;color:var(--sub);max-width:100%}
 .chipsel select,.chipsel input{border:0;background:transparent;font-size:16px;font-weight:600;color:var(--sub);padding:0;min-width:0;max-width:190px;-webkit-appearance:none;appearance:none;height:36px}
 .chipsel input[type=date]{max-width:150px;min-height:0;display:block}
 h2.sh{font-size:17px;font-weight:800;display:flex;align-items:center;gap:8px;margin:22px 2px 12px}
@@ -100,15 +100,16 @@ h2.sh .sp{flex:1}h2.sh .s{font-size:13px;color:var(--mute);font-weight:600}
 .dist .bk .k{font-size:13px;color:var(--sub);font-weight:600;white-space:nowrap}
 .dist .bk .v{font-size:23px;font-weight:800;margin-top:2px;white-space:nowrap}.dist .bk .v small{font-size:15px;font-weight:700}
 .dist .bk.amt .v{font-size:14.5px;margin-top:3px}
+@media (max-width:420px){.dist .bk.amt .v{font-size:12.5px;letter-spacing:-.03em}}
 .dist .bk:disabled,.dist .bk.zero{cursor:default}.dist .bk:disabled .k,.dist .bk:disabled .v,.dist .bk.zero .k,.dist .bk.zero .v{color:#C2C8D0}
 .dist .bk.sel{background:var(--blue-bg)}
 .cta{display:flex;width:100%;align-items:center;justify-content:space-between;border:0;border-radius:12px;padding:13px 14px;margin-top:10px;font-size:15px;font-weight:700;cursor:pointer;text-align:left}
 .cta.r{background:var(--red-bg);color:var(--red)}.cta.o{background:var(--org-bg);color:var(--org)}.cta.on{outline:2px solid currentColor}
 .filt{display:flex;align-items:center;gap:8px;background:var(--blue-bg);color:var(--blue);border-radius:12px;padding:9px 12px;font-size:13.5px;font-weight:700;margin:0 0 6px}
-.filt .grow{min-width:0}.filt button{border:0;background:#fff;color:var(--blue);border-radius:8px;padding:5px 9px;font-weight:700;font-size:12.5px;cursor:pointer}
+.filt .grow{min-width:0}.filt button{border:0;background:#fff;color:var(--blue);border-radius:8px;padding:0 12px;min-height:36px;font-weight:700;font-size:12.5px;cursor:pointer}
 .sortbar{display:flex;gap:6px;overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:none;margin:-2px -16px 6px;padding:0 16px}
 .sortbar::-webkit-scrollbar{display:none}
-.sortbar button{flex:0 0 auto;font-size:13px;font-weight:600;padding:7px 12px;border-radius:20px;background:var(--chip);color:var(--sub);border:0;cursor:pointer;white-space:nowrap}
+.sortbar button{flex:0 0 auto;font-size:13.5px;font-weight:600;min-height:44px;padding:0 14px;border-radius:20px;background:var(--chip);color:var(--sub);border:0;cursor:pointer;white-space:nowrap}
 .sortbar button.on{background:var(--ink);color:#fff}
 .qbox{display:flex;align-items:center;gap:8px;background:var(--chip);border-radius:12px;padding:0 12px;margin-bottom:8px;color:var(--mute)}
 .qbox input{flex:1;border:0;background:transparent;height:44px;font-size:16px;min-width:0;outline:none;color:var(--ink)}
@@ -121,6 +122,7 @@ h2.sh .sp{flex:1}h2.sh .s{font-size:13px;color:var(--mute);font-weight:600}
 .tag{font-size:12.5px;font-weight:700;padding:3px 8px;border-radius:7px;white-space:nowrap}
 .tag.block{background:var(--red-bg);color:var(--red)}.tag.soon{background:var(--org-bg);color:var(--org)}.tag.ok{background:var(--blue-bg);color:var(--blue)}
 .tag.hold{background:#F1E9FB;color:#6A3FA0}.tag.none{background:var(--gry-bg);color:var(--gry)}.tag.warn{background:var(--ylw-bg);color:#7A5A00}
+.tag.t-b{background:var(--blue-bg);color:#1849C6}.tag.t-y{background:#FFF4CC;color:#7A5A00}.tag.t-o{background:#FFEAD5;color:var(--org)}.tag.t-r{background:var(--red-bg);color:var(--red)}.tag.t-g{background:var(--gry-bg);color:var(--gry)}
 .cust .s{font-size:12.5px;color:var(--mute);margin-top:5px;line-height:1.5}
 .cust .s .old{color:#B54708;font-weight:700}
 /* 하단 바 */
@@ -160,6 +162,11 @@ h2.sh .sp{flex:1}h2.sh .s{font-size:13px;color:var(--mute);font-weight:600}
 .ent .amt.s{color:var(--ink)} .ent .amt.p{color:var(--blue)}
 .ent .l2{display:flex;gap:10px;align-items:center;margin-top:6px;font-size:12.5px;color:var(--mute);flex-wrap:wrap;padding-left:46px}
 .ent .l2 .sp{flex:1}
+.emore{width:36px;height:44px;margin:-6px -8px -6px -4px;flex:0 0 auto;border:0;border-radius:10px;background:transparent;color:var(--mute);font-size:20px;font-weight:800;line-height:1;cursor:pointer;letter-spacing:1px}
+.emore[aria-expanded=true]{background:var(--chip);color:var(--ink)}
+.eact{display:flex;gap:8px;justify-content:flex-end;margin-top:8px;padding-left:46px}
+.btn.del{background:var(--chip);color:var(--red)}
+.btn.quiet{background:none;color:var(--mute);text-decoration:underline;text-underline-offset:3px}
 /* 표 (동료 관리 등) */
 table.t{width:100%;border-collapse:collapse;font-size:14px}
 table.t th,table.t td{padding:9px 6px;border-bottom:1px solid var(--line);text-align:left;vertical-align:top}
@@ -271,7 +278,12 @@ function esc(s){ return String(s ?? '').replace(/[&<>"']/g, c=>({'&':'&amp;','<'
 function dd(a,b){ return Math.round((new Date(a+'T00:00:00') - new Date(b+'T00:00:00'))/86400000); }
 function addDays(s,n){ const d=new Date(s+'T00:00:00'); d.setDate(d.getDate()+n); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function blockDays(){ const c=S.summary.find(x=>x.oldest_date && x.block_start_date); return c? dd(c.block_start_date, c.oldest_date) : 181; }
-function md(s){ return s ? s.slice(2).replaceAll('-','.') : '-'; }
+// 날짜 표기 통일: 기준 연도와 같으면 '7월 13일', 다르면 '2027년 3월 4일'
+function fd(s){ if(!s) return '-'; const [y,m,d]=String(s).slice(0,10).split('-'); const t=`${+m}월 ${+d}일`; return (S.base||todayStr()).slice(0,4)===y ? t : `${y}년 ${t}`; }
+function md(s){ return fd(s); }
+// 차단 표시 통일: 30일 이내 'D-21', 그보다 멀면 '3월 4일 차단 예정', 지났으면 '차단됨'
+function blockTxt(c){ if(!c.block_start_date) return ''; const left=dd(c.block_start_date,S.base);
+  if(Number(c.over_block)>0 || left<=0) return '차단됨'; return left<=30 ? `차단 D-${left}` : `${fd(c.block_start_date)} 차단 예정`; }
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
 function errMsg(e){ const m=(e && (e.message||e.error_description||e.msg)) || String(e);
   if(/schema must be one of|PGRST106/.test(m)) return '서버 설정 확인 필요: Data API의 Exposed schemas에 receivables가 없습니다.';
@@ -322,7 +334,7 @@ const kstDate = ts => ts ? new Date(ts).toLocaleDateString('sv-SE', {timeZone:'A
 function lastInputHtml(c, long){
   if(!c.last_input) return '';
   const ago = dd(todayStr(), c.last_input); const old = ago > STALE_DAYS;
-  const txt = `${long?c.last_input:md(c.last_input)} (${ago<=0?'오늘':ago+'일 전'})`;
+  const txt = `${fd(c.last_input)} (${ago<=0?'오늘':ago+'일 전'})`;
   return long ? `<span style="${old?'color:#b54708;font-weight:700':''}">${txt}</span>`
               : `<span style="flex-basis:100%;${old?'color:#b54708':''}">최근 입력 <b style="${old?'color:#b54708':''}">${txt}</b></span>`;
 }
@@ -366,7 +378,7 @@ function openMenu(){
 }
 function closeMenu(){ document.getElementById('menuBox')?.remove(); }
 // 날짜 짧게: 같은 해 MM/DD, 다른 해 YY.MM.DD
-function sd(s){ if(!s) return '-'; return s.slice(0,4)===S.base.slice(0,4) ? s.slice(5).replace('-','/') : s.slice(2).replaceAll('-','.'); }
+function sd(s){ return fd(s); }
 // 하단 바: keep=true면 상세 화면(거래처 미리 채움)
 function bottomBar(keep){
   return `<div class="fab"><button class="p" onclick="openEntry(${keep?'true':''})">${IC.plus}거래 입력</button>
@@ -439,14 +451,15 @@ const DIST = [ // 회전일 분포 칸: [키, 이름, 막대 색]
   ['d150','150일','#F8C94A'],['d180','180일','#F59E3D'],['over_block','181일↑','#EF4444'],['undated_remaining','날짜 미상','#98A2B3']];
 const BK_LABEL = {d30:'30일',d60:'60일',d90:'90일',d120:'120일',d150:'150일',d180:'180일',over_block:'181일 이상',undated_remaining:'날짜 미상',_soon:'곧 차단'};
 const TAGT = {block:'주문 차단', soon:'차단 임박', hold:'판정 보류', none:'미수금 없음'};
+// 회전일 태그 색 = 회전일 분포 막대 색과 같은 구간 색 (120일까지 파랑, 150일 노랑, 180일 주황, 181일↑ 빨강, 날짜 미상 회색)
+const TONE = {d30:'t-b',d60:'t-b',d90:'t-b',d120:'t-b',d150:'t-y',d180:'t-o',over_block:'t-r',undated_remaining:'t-g'};
 function custTag(c){ const k=c._s.k, t=c.turnover_days;
   if(k==='none') return `<span class="tag none">미수금 없음</span>`;
-  return `<span class="tag ${k}">${t!=null?t+'일':'회전일 미상'}${TAGT[k]&&k!=='none'?' · '+TAGT[k]:''}</span>`; }
+  return `<span class="tag ${TONE[bucketOf(c)]||'t-g'}">${t!=null?t+'일':'회전일 미상'}${TAGT[k]&&k!=='none'?' · '+TAGT[k]:''}</span>`; }
 function custSub(c){
   const parts=[]; if(S.isAdmin) parts.push(esc(c.owner_name||'-'));
-  if(Number(c.over_block)>0 && c.block_start_date) parts.push(`${sd(c.block_start_date)} 차단됨`);
-  else if(c.block_start_date){ const left=dd(c.block_start_date,S.base); parts.push(`${sd(c.block_start_date)} 차단${c._s.k==='soon'?` · D-${left}`:''}`); }
-  if(c.last_input){ const ago=dd(todayStr(), c.last_input); parts.push(`<span class="${ago>STALE_DAYS?'old':''}">입력 ${sd(c.last_input)}${ago>STALE_DAYS?` (${ago}일 전)`:''}</span>`); }
+  const bt=blockTxt(c); if(bt) parts.push(bt);
+  if(c.last_input){ const ago=dd(todayStr(), c.last_input); parts.push(`<span class="${ago>STALE_DAYS?'old':''}">최근 입력 ${fd(c.last_input)}${ago>STALE_DAYS?` (${ago}일 전)`:''}</span>`); }
   return parts.join(' · ');
 }
 function viewDash(){
@@ -469,7 +482,7 @@ function viewDash(){
   const ownerName = S.ownerFilter==='all' ? '전체 담당자' : (ownerMap.get(S.ownerFilter)||'').replace(' (나)','');
   app.innerHTML = header('회전일 차트') + `<div class="wrap">
     <div class="hero"><div class="k">미수금 현황</div><div class="v">${won(sum(c=>c.balance))}<small>원</small></div>
-      <div class="d">기준일 ${S.base.replaceAll('-','.')} · 거래처 ${base_.length}처${S.isAdmin?` · ${esc(ownerName)}`:''}</div>
+      <div class="d">기준일 ${fd(S.base)} · 거래처 ${base_.length}처${S.isAdmin?` · ${esc(ownerName)}`:''}</div>
       <div class="mini"><div><div class="l">주문 차단</div><div class="n">${nBlock}처</div></div>
         <div><div class="l">곧 차단<span class="opt"> ${SOON_DAYS}일 내</span></div><div class="n">${nSoon}처</div></div>
         <div><div class="l">181일 초과<span class="opt">분</span></div><div class="n">${won(sum(c=>c.over_block))}원</div></div></div></div>
@@ -482,7 +495,7 @@ function viewDash(){
       return `<button class="bk ${S.bucket===k?'sel':''}" onclick="pickBucket('${k}')" ${n?'':'disabled'}><div class="bar" style="background:${n?col:'#E4E7EC'}"></div><div class="k">${lbl}</div><div class="v">${n}<small>처</small></div></button>`; }).join('')}</div>
     ${nBlock?`<button class="cta r ${S.bucket==='over_block'?'on':''}" onclick="pickBucket('over_block')">주문 차단 ${nBlock}처 확인하기 ${IC.arrow}</button>`:''}
     ${nSoon?`<button class="cta o ${S.bucket==='_soon'?'on':''}" onclick="pickBucket('_soon')">곧 차단 ${nSoon}처 확인하기 ${IC.arrow}</button>`:''}
-    <h2 class="sh" id="listTop" style="scroll-margin-top:70px">거래처 <span class="s">${list.length}처</span><span class="sp"></span><button class="ib" style="width:36px;height:36px" onclick="toggleSearch()" aria-label="거래처 검색">${IC.search}</button></h2>
+    <h2 class="sh" id="listTop" style="scroll-margin-top:70px">거래처 <span class="s">${list.length}처</span><span class="sp"></span><button class="ib" onclick="toggleSearch()" aria-label="거래처 검색">${IC.search}</button></h2>
     ${S.showQ||S.q?`<div class="qbox">${IC.search}<input id="q" placeholder="거래처 검색" value="${esc(S.q)}" autocomplete="off"></div>`:''}
     <div class="sortbar">${[['turnDesc','회전일 긴 순'],['name','이름순'],['inputNew','최근 입력 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<button class="${(S.sort||'name')===v?'on':''}" onclick="setSort('${v}')">${t}</button>`).join('')}</div>
     ${S.bucket?`<div class="filt"><span class="grow">${BK_LABEL[S.bucket]} 거래처 ${list.length}처만 보는 중</span><button onclick="pickBucket(null)">전체 보기</button></div>`:''}
@@ -574,19 +587,19 @@ async function viewDetail(){
   // 차단 안내: 181일 넘은 미수를 받으면 풀리고, 다음 차단일 = 그다음 오래된 채권 + 181일
   const nextItem = items.find(i=>i.entry_date && i.age_days!=null && i.age_days < blockDays());
   const note = s.k==='block' ? `<div class="note"><b>${sd(c.block_start_date)}부터 주문이 막혀 있어요.</b><br>181일 넘은 미수 <b>${won(c.over_block)}원</b>을 받으면 ${nextItem?`풀리고, 다음 차단일은 ${sd(addDays(nextItem.entry_date, blockDays()))}예요.`:'풀려요.'}</div>`
-    : s.k==='soon' ? `<div class="note o"><b>${sd(c.block_start_date)}부터 주문이 막혀요 (D-${dd(c.block_start_date,S.base)}).</b><br>그 전에 ${sd(c.oldest_date)} 미수를 받으면 늦출 수 있어요.</div>`
+    : s.k==='soon' ? `<div class="note o"><b>차단 D-${dd(c.block_start_date,S.base)} · ${fd(c.block_start_date)}부터 주문이 막혀요.</b><br>그 전에 ${sd(c.oldest_date)} 미수를 받으면 늦출 수 있어요.</div>`
     : s.k==='hold' ? `<div class="note o"><b>날짜를 모르는 미수 ${won(c.undated_remaining)}원이 있어요.</b><br>이전 거래장을 올리면 정확한 회전일이 나와요.</div>` : '';
   app.innerHTML = header(c.customer_name, true, `<button class="btn sm ghost" onclick="editCustName()">${IC.pen}이름</button>`) + `<div class="wrap">
     <div id="cnRow"></div>
     <div class="hero"><span class="tag ${s.k}">${s.t}</span>
       <div class="two"><div><div class="k">회전일</div><div class="v">${c.turnover_days??'-'}${c.turnover_days!=null?'<small>일</small>':''}</div></div>
         <div style="text-align:right;min-width:0"><div class="k">미수 잔액</div><div class="v" style="font-size:24px">${won(c.balance)}<small style="font-size:16px">원</small></div></div></div>
-      <div class="d">기준일 ${S.base.replaceAll('-','.')}${Number(c.prepayment)>0?` · 선수금 ${won(c.prepayment)}원`:''}</div></div>
+      <div class="d">기준일 ${fd(S.base)}${Number(c.prepayment)>0?` · 선수금 ${won(c.prepayment)}원`:''}</div></div>
     ${note}
     ${Number(c.balance)>0?`<button class="cta b" onclick="openCalc()">${IC.cal.replace('class="ic"','class="ic" style="margin-right:6px"')}<span class="grow">월말 수금 계산하기</span>${IC.arrow}</button>`:''}
     <div class="kvl">
-      ${c.oldest_date?`<div><span>가장 오래된 채권</span><b>${c.oldest_date}</b></div>`:''}
-      ${c.last_order_date?`<div><span>마지막 주문 가능일</span><b>${c.last_order_date}</b></div><div><span>차단 시작</span><b style="${s.k==='block'||s.k==='soon'?'color:var(--red)':''}">${c.block_start_date}</b></div>`:''}
+      ${c.oldest_date?`<div><span>가장 오래된 채권</span><b>${fd(c.oldest_date)}</b></div>`:''}
+      ${c.last_order_date?`<div><span>마지막 주문 가능일</span><b>${fd(c.last_order_date)}</b></div><div><span>차단</span><b style="${s.k==='block'||s.k==='soon'?'color:var(--red)':''}">${blockTxt(c)}${s.k!=='block'&&dd(c.block_start_date,S.base)<=30?` (${fd(c.block_start_date)})`:''}</b></div>`:''}
       ${S.isAdmin?`<div><span>담당자</span><select class="i" id="ownSel">${S.members.map(m=>`<option value="${m.user_id}" ${m.user_id===c.owner_id?'selected':''}>${esc(m.display_name)}${m.active===false?' (사용 중지)':''}</option>`).join('')}</select></div>`:''}
       ${c.last_input?`<div><span>최근 입력</span><b>${lastInputHtml(c, true)}</b></div>`:''}
     </div>
@@ -600,7 +613,7 @@ async function viewDetail(){
     <h2 class="sh">거래 내역<span class="sp"></span><span class="s">최근 순</span></h2>
     <div id="entBody">${entsHtml()}</div>
     ${entries.some(e=>e._mis)?'<div class="err">⚠ 거래장 잔액과 계산 잔액이 다른 행이 있습니다. 빠진 거래나 금액 오타를 확인하세요.</div>':''}
-    <div style="text-align:right;margin-top:22px"><button class="btn sm danger" onclick="delCustomer()">거래처 삭제</button></div>
+    <div style="text-align:right;margin-top:22px"><button class="btn sm quiet" onclick="delCustomer()">거래처 삭제</button></div>
   </div>` + bottomBar(true);
   if(S.isAdmin){ document.getElementById('ownSel').onchange = async ev=>{
     const {error} = await sb.from('customers').update({owner_id: ev.target.value}).eq('id', c.customer_id);
@@ -623,11 +636,11 @@ function entsHtml(){ // 거래 내역: 최근 10건씩
         return `<div class="ent ${e._mis?'bad':e.status==='확인대기'?'pend':''}">
         <div class="l1"><span class="ei ${isPay?'p':''}">${isPay?IC.dn:IC.up}</span>
           <span class="mm"><span class="it">${esc(e.item||e.kind)}</span><span class="dt">${e.entry_date?md(e.entry_date):'날짜미상'}</span> · <span class="kd">${e.kind}</span>${ph?` · <span title="사진 보기" style="cursor:pointer;color:var(--blue)" onclick="viewPhoto('${e.photo_id}')">사진</span>`:''}</span>
-          <span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span></div>
+          <span class="amt ${isPay?'p':'s'}">${(isPay?'−':'+')+won(amt)}</span>
+          <button class="emore" aria-label="거래 메뉴" aria-expanded="false" onclick="entMenu(this,'${e.id}')">⋯</button></div>
         <div class="l2"><span>계산 ${e._rb!=null?won(e._rb):'-'}</span>${e.ledger_balance!=null?`<span>거래장 ${won(e.ledger_balance)} ${e._mis?'<b style="color:var(--red)">불일치 ⚠</b>':'<span style="color:var(--grn)">✓</span>'}</span>`:''}
           <span class="sp"></span>
-          ${e.status==='확인대기'?`<button class="btn sm sec" onclick="confirmEntry('${e.id}')">확정</button>`:''}
-          <button class="btn sm danger" onclick="delEntry('${e.id}')">삭제</button></div></div>`;}).join('') + moreBtn(all.length-list.length, 'moreEnt()');
+          ${e.status==='확인대기'?`<button class="btn sm sec" onclick="confirmEntry('${e.id}')">확정</button>`:''}</div></div>`;}).join('') + moreBtn(all.length-list.length, 'moreEnt()');
 }
 const PAGE=10;
 const moreBtn=(left, fn)=> left>0 ? `<button type="button" class="more" onclick="${fn}">더 보기</button>` : '';
@@ -643,7 +656,7 @@ function ordersHtml(){
   const shown = items.slice(0, S.ordN);
   const cls = i => i.age_days==null ? 'hold' : i.age_days>=blockDays() ? 'block' : i.age_days>=blockDays()-31 ? 'soon' : 'ok';
   return head + (items.length? shown.map(i=>{ const k=cls(i); return `<div class="ord"><div class="m"><div class="t1">${esc(i.item||i.kind)}</div>
-      <div class="tags"><span class="tag ${k}">${i.age_days!=null?i.age_days+'일':'날짜 미상'}${k==='block'?' · 주문 차단':''}</span><span class="s">${i.entry_date?md(i.entry_date)+' 발생 · 마감 '+md(addDays(i.entry_date, blockDays()-1)):'이월'}</span></div></div>
+      <div class="tags"><span class="tag ${TONE[bucketKey(i)]}">${i.age_days!=null?i.age_days+'일':'날짜 미상'}${k==='block'?' · 주문 차단':''}</span><span class="s">${i.entry_date?md(i.entry_date)+' 발생 · 마감 '+md(addDays(i.entry_date, blockDays()-1)):'이월'}</span></div></div>
       <div class="r" style="${k==='block'?'color:var(--red)':''}">${won(i.remaining)}</div></div>`; }).join('') + moreBtn(items.length-shown.length,'moreOrd()')
     : '<div class="muted">이 구간의 주문이 없습니다.</div>');
 }
@@ -698,7 +711,7 @@ function calcHtml(c, D, pay){
   // 목표 회전일까지 필요한 금액 = 그날 기준 N일 넘는 주문(날짜 미상 포함) 합계
   const need = N => items.filter(i=>!i.entry_date || age(i)>N).reduce((t,i)=>t+i.rem,0);
   const rows = [[120,'120일 이하'],[90,'90일 이하'],[60,'60일 이하'],[bd-1,'차단 피하기']].map(([N,l])=>{ const n=need(N);
-    return `<tr><td>${l} <span class="x2">· ${N===bd-1?bd+'일 미만':(x=>+x.slice(5,7)+'/'+(+x.slice(8)))(addDays(D,-N))+' 이전 주문 정리'}</span></td><td class="n" style="${n===0?'color:var(--grn)':''}">${won(n)}원</td></tr>`; }).join('');
+    return `<tr><td>${l} <span class="x2">· ${N===bd-1?bd+'일 미만':fd(addDays(D,-N))+' 이전 주문 정리'}</span></td><td class="n" style="${n===0?'color:var(--grn)':''}">${won(n)}원</td></tr>`; }).join('');
   return res + (items.length? lst : '') + `<div class="ctg"><div class="h">${dS}에 회전일을 맞추려면</div><table>${rows}</table></div>
     <div class="cfoot">· 가장 오래된 미수부터 빠지는 방식(지금 계산과 동일)으로 계산해요.<br>· ${dS} 전에 새로 들어올 주문, 매출할인, 반품은 넣지 않았어요.</div>`;
 }
@@ -712,6 +725,14 @@ async function viewPhoto(id){
   if(w) w.location.href=data.signedUrl; else location.href=data.signedUrl;
 }
 async function confirmEntry(id){ const {error}=await sb.from('entries').update({status:'확정'}).eq('id',id); if(error) toast(errMsg(error)); else await refresh(true); }
+// 거래 줄의 ⋯ : 누르면 그 줄 아래에 '이 거래 삭제'가 나옴 (다시 누르면 닫힘)
+function entMenu(btn, id){
+  const ent=btn.closest('.ent'); const open=ent.querySelector('.eact');
+  document.querySelectorAll('.eact').forEach(x=>x.remove()); document.querySelectorAll('.emore[aria-expanded=true]').forEach(b=>b.setAttribute('aria-expanded','false'));
+  if(open) return;
+  btn.setAttribute('aria-expanded','true');
+  ent.insertAdjacentHTML('beforeend', `<div class="eact"><button class="btn sm del" onclick="delEntry('${id}')">이 거래 삭제</button></div>`);
+}
 async function delEntry(id){ if(!confirm('이 거래를 삭제할까요?')) return; const {error}=await sb.from('entries').delete().eq('id',id); if(error) toast(errMsg(error)); else { toast('삭제했습니다.'); await refresh(true); } }
 async function delCustomer(){ const c=S.summary.find(x=>x.customer_id===S.custId);
   if(!confirm(`'${c.customer_name}'와 모든 거래 내역을 삭제할까요? 되돌릴 수 없습니다.`)) return;
