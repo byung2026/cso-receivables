@@ -191,20 +191,37 @@ Deno.serve(async (req) => {
     const mediaType = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(blob.type) ? blob.type : "image/jpeg";
     const b64 = encodeBase64(new Uint8Array(await blob.arrayBuffer()));
 
+    // 시도마다 모델·줄 수·불일치·시간·사용량·오류를 기록 (정밀 재확인이 실제로 도움이 되는지 나중에 집계)
+    type Attempt = { model: string; ms: number; rows?: number; bad?: number; usage?: unknown; error?: string };
+    const attempts: Attempt[] = [];
+    const t0 = Date.now();
     let used = "haiku";
-    let result = await readWith(MODELS.fast, key, b64, mediaType);
+    let result: Awaited<ReturnType<typeof readWith>>;
+    try {
+      result = await readWith(MODELS.fast, key, b64, mediaType);
+    } catch (e) {
+      attempts.push({ model: "haiku", ms: Date.now() - t0, error: String((e as Error).message ?? e).slice(0, 300) });
+      throw e;
+    }
     let bad = autoSwap(result.rows);
+    attempts.push({ model: "haiku", ms: Date.now() - t0, rows: result.rows.length, bad, usage: result.usage });
     if (bad > 0 || result.rows.length === 0) {
+      const t1 = Date.now();
       try {
         const r2 = await readWith(MODELS.accurate, key, b64, mediaType);
         const bad2 = autoSwap(r2.rows);
+        attempts.push({ model: "sonnet", ms: Date.now() - t1, rows: r2.rows.length, bad: bad2, usage: r2.usage });
         if (r2.rows.length > 0 && bad2 <= bad) { result = r2; bad = bad2; used = "sonnet"; }
-      } catch (_) { /* 재시도 실패 시 Haiku 결과 유지 */ }
+      } catch (e) { // 재시도 실패 시 Haiku 결과 유지하되 사유는 남김
+        const msg = String((e as Error).message ?? e).slice(0, 300);
+        attempts.push({ model: "sonnet", ms: Date.now() - t1, error: msg });
+        console.error("sonnet retry failed", photo_id, msg);
+      }
     }
 
     const { error: ue } = await sb.from("photos").update({
       read_model: used,
-      read_result: { customer_name: result.customer_name, rows: result.rows, notes: result.notes ?? "", bad },
+      read_result: { customer_name: result.customer_name, rows: result.rows, notes: result.notes ?? "", bad, chosen: used, attempts },
       status: "읽기완료",
     }).eq("id", photo_id);
     if (ue) console.error("photos update failed", photo_id, ue.message); // 읽은 결과는 그대로 돌려주고, 기록 실패만 서버 로그에 남김
