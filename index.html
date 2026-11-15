@@ -814,7 +814,7 @@ async function ledgerCheck(cid, lbv){
 const blankRow = (date)=>({date: date||todayStr(), kind:'판매', amt:null, item:'', lb:null, flag:'', skip:false});
 function openPaste(photo, keep){
   pushNav({v:'paste', photo:!!photo, keep:!!keep});
-  if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; (S.photoUrls||[]).forEach(u=>{try{URL.revokeObjectURL(u)}catch(_){}}); S.photoUrls=[];
+  if(!keep) S.entryCustName=''; S.view='paste'; S.photoMode=!!photo; S.photoIds=[]; (S.photoUrls||[]).forEach(u=>{try{u&&URL.revokeObjectURL(u)}catch(_){}}); S.photoUrls=[];
   S.rows=[blankRow()]; S.startBal=0; S.startCust=null; S.existList=[]; S.failedPhotos=[];
   viewPaste();
 }
@@ -833,16 +833,18 @@ async function shrink(file){
 // items: 새 파일(File) 또는 이미 올렸지만 읽기에 실패한 사진 {gi} → 사진마다 따로 처리해서 한 장이 실패해도 나머지 결과는 살림
 async function readPhotos(items, onStatus){
   const uid=S.session.user.id; const all=[]; let name=''; const failed=[]; const done=[];
+  // 고른 순서대로 사진 번호(자리)를 먼저 잡아 둠 → 올리기에 실패해 다시 올려도 원래 번호·순서 유지
+  items = items.map(it=> it instanceof File ? (S.photoIds.push(null), S.photoUrls.push(null), {gi:S.photoIds.length-1, file:it}) : it);
   for(let n=0;n<items.length;n++){
-    const it=items[n]; let gi = it instanceof File ? null : it.gi;
+    const it=items[n], gi=it.gi;
     try{
-      if(gi==null){
+      if(!S.photoIds[gi]){
         onStatus(`${n+1}/${items.length}장 올리는 중...`);
-        const blob=await shrink(it);
-        const path=`${uid}/${Date.now()}-${n}.jpg`;
+        const blob=await shrink(it.file);
+        const path=`${uid}/${Date.now()}-${gi}.jpg`;
         const up=await sb.storage.from('ledger-photos').upload(path, blob, {contentType:'image/jpeg'}); if(up.error) throw up.error;
         const ph=await sb.from('photos').insert({storage_path:path}).select('id').single(); if(ph.error) throw ph.error;
-        S.photoIds.push(ph.data.id); S.photoUrls.push(URL.createObjectURL(blob)); gi=S.photoIds.length-1; // 이 사진의 번호(입력 화면 전체 기준)
+        S.photoIds[gi]=ph.data.id; S.photoUrls[gi]=URL.createObjectURL(blob);
       }
       onStatus(`${n+1}/${items.length}장 읽는 중... (10~30초)`);
       const {data, error}=await sb.functions.invoke('read-ledger',{body:{photo_id:S.photoIds[gi]}});
@@ -851,7 +853,7 @@ async function readPhotos(items, onStatus){
       all.push(...data.rows.map(r=>({...r, _photo:gi, _model:data.model}))); done.push(gi);
     }catch(e){
       // 올리기 전에 실패 → 파일을 다시 올려야 함 / 올린 뒤 읽기만 실패 → 다시 읽기만 하면 됨
-      failed.push({item: gi==null ? it : {gi}, label: gi==null ? `${n+1}번째 사진` : `사진 ${gi+1}`, msg: errMsg(e)});
+      failed.push({item: S.photoIds[gi] ? {gi} : it, label: `사진 ${gi+1}${S.photoIds[gi]?'':' (올리기 실패)'}`, msg: errMsg(e)});
     }
   }
   // 겹쳐 찍은 사진의 같은 줄(날짜·구분·금액 같고, 잔액이 있으면 잔액도 같음)은 중복 의심 → 기본 '저장 안 함'
@@ -926,7 +928,7 @@ function rowHtml(r,i){
   const fmt = v => v==null||v===''?'':Number(v).toLocaleString('ko-KR');
   return `<div class="mrow" data-i="${i}">
     <div class="mhead"><b>${i+1}</b>${r.ph!=null&&S.photoUrls?.[r.ph]?`<button type="button" class="phchip" data-ph="${r.ph}" aria-label="사진 ${r.ph+1} 보기">${IC.photo}사진 ${r.ph+1}</button>`:''}
-      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'||r.flag==='carry'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래':r.flag==='carry'?'기존 거래처라 이월 제외':'사진 글자가 흐림 · 확인대기로 저장'})</span></label>`:''}
+      ${r.flag==='dup'||r.flag==='unc'||r.flag==='exist'||r.flag==='carry'?`<label class="mskip"><input type="checkbox" data-f="skip" ${r.skip?'checked':''}> 저장 안 함 <span class="muted">(${r.flag==='dup'?'앞 사진과 같은 줄':r.flag==='exist'?'이미 저장된 거래'+(r.unc?' · 사진 글자가 흐림':''):r.flag==='carry'?'기존 거래처라 이월 제외':'사진 글자가 흐림 · 확인대기로 저장'})</span></label>`:''}
       <span class="grow"></span><button type="button" class="mdel" data-del="${i}" aria-label="이 줄 삭제">🗑</button></div>
     <div class="mgrid">
       <label>일자<input class="i" type="date" data-f="date" value="${r.date||''}"></label>
@@ -948,7 +950,10 @@ function paintStatus(){
     if(e.state==='ok') save++; else if(e.state==='mis'){ save++; bad++; } else if(e.state==='err') bad++; else skip++;
   });
   const name = (document.getElementById('pc')||{}).value?.trim();
+  const kept = S.rows.filter((r,i)=>ev[i].state==='ok'||ev[i].state==='mis');
+  const nUnc = kept.filter(r=>r.unc).length, nFix = kept.filter(r=>r.fixed).length;
   document.getElementById('msum').innerHTML = `저장할 줄 <b>${save}</b>${bad?` · <span style="color:var(--red)">확인 필요 ${bad}</span>`:''}${skip?` · 저장 안 함 ${skip}`:''}`
+    + (nUnc?` · 흐린 줄 ${nUnc}개는 확인대기로 저장`:'') + (nFix?` · 자동 교정 ${nFix}줄`:'')
     + (ev.some(e=>e.state==='mis')?'<div class="muted">불일치 줄은 \'확인대기\'로 저장됩니다.</div>':'');
   document.getElementById('ps').disabled = !name || !save || ev.some(e=>e.state==='err');
 }
@@ -1042,7 +1047,7 @@ function viewPaste(){
       S.failedPhotos = r.failed;
       if(r.done.length) S.photoMode=true; markExisting(); renderRows(); paintThumbs();
       const ok=r.done.length, models=r.models.map(m=>m==='sonnet'?'정밀 재확인':'빠른 읽기').join(', ');
-      if(!r.failed.length){ st.className='ok'; st.textContent=`${ok}장 읽기 완료 (${models}). 빨간 줄만 사진과 대조해서 고치세요. 위 사진이나 줄의 [사진] 단추를 누르면 크게 볼 수 있어요.`; }
+      if(!r.failed.length){ st.className='ok'; st.textContent=`${ok}장 읽기 완료 (${models}). 빨간 줄(잔액 불일치)은 사진과 대조해서 고치세요. 흐린 줄과 자동 교정된 줄도 한 번 확인해 주세요. 위 사진이나 줄의 [사진] 단추를 누르면 크게 볼 수 있어요.`; }
       else {
         st.className='err';
         st.innerHTML=`${files.length}장 중 ${ok}장 읽기 완료${ok?` (${models})`:''} · <b>${r.failed.length}장 실패</b><br>`+r.failed.map(f=>`${esc(f.label)}: ${esc(f.msg)}`).join('<br>')
@@ -1059,11 +1064,11 @@ function viewPaste(){
       const ins = S.rows.map((r,i)=>({r, e:ev[i]})).filter(x=>x.e.state==='ok'||x.e.state==='mis').map(({r,e})=>({
         customer_id:cid, kind:r.kind, entry_date:r.date||null, item:r.item||null,
         sale_amount: isCredit(r.kind)?0:r.amt, pay_amount: isCredit(r.kind)?r.amt:0, ledger_balance:r.lb,
-        input_method: S.photoMode?'사진':'엑셀', photo_id: (r.ph!=null && S.photoIds[r.ph]) || null, status: (e.state==='mis'||r.flag==='unc')?'확인대기':'확정'}));
+        input_method: S.photoMode?'사진':'엑셀', photo_id: (r.ph!=null && S.photoIds[r.ph]) || null, status: (e.state==='mis'||r.unc)?'확인대기':'확정'}));
       // 한 번에 저장: 전부 들어가거나 하나도 안 들어감 → 실패 후 다시 눌러도 중복 없음 (입력 순서대로 번호가 매겨짐)
       if(ins.length){ const {error}=await sb.from('entries').insert(ins); if(error) throw error; }
       let phWarn='';
-      if(S.photoIds.length){ const {error:pe}=await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds);
+      if(S.photoIds.some(Boolean)){ const {error:pe}=await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds.filter(Boolean));
         if(pe) phWarn=' (사진 상태 기록은 실패했어요. 거래는 저장됐습니다)'; } // 거래 저장은 끝났으니 다시 누르지 않게 성공으로 처리
       S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.${phWarn}`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash');
@@ -1074,25 +1079,45 @@ function viewPaste(){
 // ===== 입력 화면: 올린 사진 보기 =====
 function paintThumbs(){
   const el=document.getElementById('pthumbs'); if(!el) return; const u=S.photoUrls||[];
-  el.innerHTML = u.map((x,i)=>`<button type="button" onclick="openPhotoView(${i})" aria-label="사진 ${i+1} 크게 보기"><img src="${x}" alt=""><b>${i+1}</b></button>`).join('');
-  el.style.display = u.length?'flex':'none';
+  el.innerHTML = u.map((x,i)=>x?`<button type="button" onclick="openPhotoView(${i})" aria-label="사진 ${i+1} 크게 보기"><img src="${x}" alt=""><b>${i+1}</b></button>`:'').join('');
+  el.style.display = u.some(Boolean)?'flex':'none';
 }
+let PV_RETURN=null; // 사진 창을 닫으면 초점을 돌려놓을 단추
 function openPhotoView(i){
-  const u=S.photoUrls||[]; if(!u[i]) return; closePhotoView(true);
+  const u=S.photoUrls||[]; if(!u[i]) return;
+  const list=u.map((x,k)=>x?k:null).filter(k=>k!=null); // 올라간 사진만 (올리기 실패한 자리는 건너뜀)
+  if(!document.getElementById('photoView')) PV_RETURN=document.activeElement;
+  closePhotoView(true);
   try{ history.pushState({...(history.state||{}), sheet:1}, ''); }catch(_){}
-  const v=document.createElement('div'); v.id='photoView'; v.className='pview'; v.setAttribute('role','dialog');
-  v.innerHTML=`<div class="pvh">${u.length>1?`<button type="button" data-go="-1" aria-label="이전 사진">‹</button>`:''}<b>사진 ${i+1} / ${u.length}</b>${u.length>1?`<button type="button" data-go="1" aria-label="다음 사진">›</button>`:''}<button type="button" data-z>확대</button><button type="button" data-x aria-label="닫기">✕</button></div>
-    <div class="pvb"><img src="${u[i]}" alt="거래장 사진 ${i+1}"></div>`;
+  const v=document.createElement('div'); v.id='photoView'; v.className='pview'; v.setAttribute('role','dialog'); v.setAttribute('aria-modal','true'); v.setAttribute('aria-label','거래장 사진 크게 보기');
+  const multi=list.length>1;
+  v.innerHTML=`<div class="pvh">${multi?`<button type="button" data-go="-1" aria-label="이전 사진">‹</button>`:''}<b aria-live="polite"></b>${multi?`<button type="button" data-go="1" aria-label="다음 사진">›</button>`:''}<button type="button" data-z>확대</button><button type="button" data-x aria-label="닫기">✕</button></div>
+    <div class="pvb"><img src="" alt=""></div>`;
+  const show=k=>{ i=k; const img=v.querySelector('.pvb img'); img.src=u[k]; img.alt=`거래장 사진 ${k+1}`; v.querySelector('.pvh b').textContent=`사진 ${k+1}`+(multi?` (${list.indexOf(k)+1}/${list.length})`:''); v.querySelector('.pvb').scrollTo(0,0); };
+  const go=d=>{ const p=list.indexOf(i); show(list[(p+d+list.length)%list.length]); };
+  const zoom=()=>{ const b=v.querySelector('.pvb'); b.classList.toggle('z'); v.querySelector('[data-z]').textContent=b.classList.contains('z')?'맞춤':'확대'; };
   v.onclick=e=>{ const t=e.target.closest('button');
-    if(e.target.tagName==='IMG'||(t&&t.hasAttribute('data-z'))){ const b=v.querySelector('.pvb'); b.classList.toggle('z'); v.querySelector('[data-z]').textContent=b.classList.contains('z')?'맞춤':'확대'; return; }
+    if(e.target.tagName==='IMG'||(t&&t.hasAttribute('data-z'))){ zoom(); return; }
     if(!t) return;
     if(t.hasAttribute('data-x')) closePhotoView();
-    else if(t.dataset.go){ const n=(i+Number(t.dataset.go)+u.length)%u.length; i=n; v.querySelector('.pvb img').src=u[n]; v.querySelector('.pvh b').textContent=`사진 ${n+1} / ${u.length}`; v.querySelector('.pvb').scrollTo(0,0); }
+    else if(t.dataset.go) go(Number(t.dataset.go));
   };
-  document.body.appendChild(v);
+  // 키보드: Esc 닫기, ←/→ 사진 넘기기, Tab은 창 안에서만 돌기
+  v.onkeydown=e=>{
+    if(e.key==='Escape'){ e.preventDefault(); closePhotoView(); }
+    else if(multi && (e.key==='ArrowLeft'||e.key==='ArrowRight')){ e.preventDefault(); go(e.key==='ArrowLeft'?-1:1); }
+    else if(e.key==='Tab'){ const f=[...v.querySelectorAll('button')]; const first=f[0], last=f[f.length-1];
+      if(e.shiftKey && document.activeElement===first){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey && document.activeElement===last){ e.preventDefault(); first.focus(); }
+      else if(!v.contains(document.activeElement)){ e.preventDefault(); first.focus(); } }
+  };
+  show(i); document.body.appendChild(v); v.querySelector('[data-x]').focus();
 }
+function removePhotoView(){ const v=document.getElementById('photoView'); if(!v) return; v.remove();
+  const r=PV_RETURN; PV_RETURN=null; if(r && document.contains(r)) try{ r.focus(); }catch(_){} }
 function closePhotoView(silent){ const v=document.getElementById('photoView'); if(!v) return;
-  if(!silent && history.state && history.state.sheet) history.back(); else v.remove(); }
+  if(silent){ v.remove(); return; } // 다른 사진으로 바로 바꿀 때 (초점 복귀 없이)
+  if(history.state && history.state.sheet) history.back(); else removePhotoView(); }
 
 // ===== 엑셀 내려받기 (거래처 요약) =====
 // 관리자: 전체 / 담당자별로 골라서 받기. 동료: 본인 거래처만 (서버 권한상 본인 것만 불러와짐)
@@ -1335,7 +1360,7 @@ document.addEventListener('paste', e=>{
 window.addEventListener('popstate', async e=>{
   if(!S.session || !S.me) return;
   if(document.getElementById('calcSheet')){ document.getElementById('calcSheet').remove(); return; } // 계산기 창 닫기
-  if(document.getElementById('photoView')){ document.getElementById('photoView').remove(); return; } // 사진 보기 닫기
+  if(document.getElementById('photoView')){ removePhotoView(); return; } // 사진 보기 닫기 (초점은 누른 단추로)
   closeMenu();
   const st = e.state || {v:'dash'}; NAV_POP = true;
   try{

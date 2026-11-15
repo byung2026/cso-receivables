@@ -200,7 +200,12 @@ Deno.serve(async (req) => {
     try {
       result = await readWith(MODELS.fast, key, b64, mediaType);
     } catch (e) {
-      attempts.push({ model: "haiku", ms: Date.now() - t0, error: String((e as Error).message ?? e).slice(0, 300) });
+      const msg = String((e as Error).message ?? e).slice(0, 300);
+      attempts.push({ model: "haiku", ms: Date.now() - t0, error: msg });
+      console.error("haiku read failed", photo_id, msg);
+      // 빠른 판독 실패도 기록 (상태 '오류'). 다시 읽기에 성공하면 '읽기완료'로 덮어씀
+      const { error: fe } = await sb.from("photos").update({ status: "오류", read_result: { error: msg, attempts } }).eq("id", photo_id);
+      if (fe) console.error("photos update failed", photo_id, fe.message);
       throw e;
     }
     let bad = autoSwap(result.rows);
