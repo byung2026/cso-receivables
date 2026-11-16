@@ -117,6 +117,9 @@ h2.sh .sp{flex:1}h2.sh .s{font-size:13px;color:var(--mute);font-weight:600}
 .cust{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:14px 2px;cursor:pointer;color:inherit}
 .cust .m{min-width:0;flex:1}
 .cust .nm{display:block;font-size:16.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cust .memo{display:block;font-size:12.5px;color:var(--sub);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dmemo{display:flex;gap:6px;align-items:center;margin:0 2px 10px;font-size:13.5px;color:var(--sub)}.dmemo b{font-weight:600;color:#4E5968;background:var(--chip);border-radius:6px;padding:2px 8px}
+.exist{margin-top:8px;padding:10px 12px;background:var(--blue-bg);border-radius:10px;font-size:13.5px;color:#1849C6;line-height:1.5}.exist .muted{color:#4E5968}
 .cust .a{font-size:16.5px;font-weight:700;white-space:nowrap}
 .tags{display:flex;gap:6px;align-items:center;margin-top:6px;flex-wrap:wrap}
 .tag{font-size:12.5px;font-weight:700;padding:3px 8px;border-radius:7px;white-space:nowrap}
@@ -331,10 +334,11 @@ async function loadMe(){
 }
 async function loadMembers(){ const {data} = await sb.from('members').select('*').order('display_name'); S.members = data || []; }
 async function loadSummary(){
-  const [{data, error}, {data:li}] = await Promise.all([sb.rpc('customer_summary', {p_base: S.base}), sb.rpc('last_inputs')]);
+  const [{data, error}, {data:li}, {data:mm}] = await Promise.all([sb.rpc('customer_summary', {p_base: S.base}), sb.rpc('last_inputs'), sb.from('customers').select('id,memo').not('memo','is',null)]);
   if(error) throw error;
   const last = new Map((li||[]).map(r=>[r.customer_id, kstDate(r.last_input_at)]));
-  S.summary = (data||[]).map(c=>({...c, last_input: last.get(c.customer_id)||null, _s: status(c)}))
+  const memo = new Map((mm||[]).map(r=>[r.id, r.memo])); // 거래처 비고 (같은 이름 병원 구분용 메모)
+  S.summary = (data||[]).map(c=>({...c, memo: memo.get(c.customer_id)||'', last_input: last.get(c.customer_id)||null, _s: status(c)}))
     .sort((a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko')); // 거래처 이름 가나다순
 }
 
@@ -475,7 +479,7 @@ function custSub(c){
 function viewDash(){
   const base_ = S.summary.filter(c=>
     (S.ownerFilter==='all' || c.owner_id===S.ownerFilter) &&
-    (!S.q || c.customer_name.includes(S.q)));
+    (!S.q || c.customer_name.includes(S.q) || (c.memo||'').includes(S.q))); // 비고로도 검색
   // 회전일 칸: 거래처마다 '회전일(가장 오래된 채권)' 기준으로 한 칸에만 들어감 (중복 없음)
   const inBucket = c => S.bucket==='_soon' ? c._s.k==='soon' : bucketOf(c)===S.bucket;
   const list = sortList(S.bucket ? base_.filter(inBucket) : base_);
@@ -510,7 +514,7 @@ function viewDash(){
     <div class="sortbar">${[['turnDesc','회전일 긴 순'],['name','이름순'],['inputNew','최근 입력 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<button class="${(S.sort||'name')===v?'on':''}" onclick="setSort('${v}')">${t}</button>`).join('')}</div>
     ${S.bucket?`<div class="filt"><span class="grow">${BK_LABEL[S.bucket]} 거래처 ${list.length}처만 보는 중</span><button onclick="pickBucket(null)">전체 보기</button></div>`:''}
     <div class="clist">${list.length? list.map(c=>`<button class="cust" onclick="openCust('${c.customer_id}')">
-        <div class="m"><span class="nm">${esc(c.customer_name)}</span>
+        <div class="m"><span class="nm">${esc(c.customer_name)}</span>${c.memo?`<span class="memo">📝 ${esc(c.memo)}</span>`:''}
           <div class="tags">${custTag(c)}${c.pending_count>0?`<span class="tag warn">확인대기 ${c.pending_count}</span>`:''}${c.ledger_mismatch_count>0?`<span class="tag block">잔액 불일치 ${c.ledger_mismatch_count}</span>`:''}</div>
           <div class="s">${custSub(c)}</div></div>
         <div class="a">${won(c.balance)}원</div></button>`).join('')
@@ -551,19 +555,22 @@ function pickBucket(k){ S.bucket = (k && S.bucket!==k) ? k : null; viewDash(); i
 function editCustName(){
   const c = S.summary.find(x=>x.customer_id===S.custId); if(!c) return;
   const row = document.getElementById('cnRow');
-  row.innerHTML = `<form id="cnf" class="card" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px"><div class="muted" style="flex-basis:100%">거래처 이름 변경</div>
+  row.innerHTML = `<form id="cnf" class="card" style="display:flex;gap:6px;flex-wrap:wrap;margin:4px 0 12px"><div class="muted" style="flex-basis:100%">거래처 이름</div>
     <input class="i" id="cnIn" maxlength="40" value="${esc(c.customer_name)}" style="flex:1 1 100%" autocomplete="off">
+    <div class="muted" style="flex-basis:100%;margin-top:6px">비고 (지역·원장님·결제일 등 · 목록과 검색에 나와요)</div>
+    <input class="i" id="cmIn" maxlength="60" value="${esc(c.memo||'')}" placeholder="예: 포항 북구 양학동" style="flex:1 1 100%" autocomplete="off">
     <button class="btn sm">저장</button><button type="button" class="btn sm sec" onclick="viewDetail()">취소</button>
     <div id="cnMsg" class="err" style="flex-basis:100%"></div></form>`;
   const inp=document.getElementById('cnIn'); inp.focus(); inp.select();
   document.getElementById('cnf').onsubmit = async e=>{
     e.preventDefault(); const nm = inp.value.trim().replace(/\s+/g,' '); const msg=document.getElementById('cnMsg');
+    const mo = document.getElementById('cmIn').value.trim().replace(/\s+/g,' ');
     if(!nm){ msg.textContent='이름을 입력하세요.'; return; }
-    if(nm===c.customer_name){ viewDetail(); return; }
-    if(S.summary.some(x=>x.owner_id===c.owner_id && x.customer_id!==c.customer_id && x.customer_name===nm)){ msg.textContent='같은 담당자에게 이미 같은 이름의 거래처가 있습니다.'; return; }
-    const {error} = await sb.from('customers').update({name: nm}).eq('id', c.customer_id);
+    if(nm===c.customer_name && mo===(c.memo||'')){ viewDetail(); return; }
+    if(nm!==c.customer_name && S.summary.some(x=>x.owner_id===c.owner_id && x.customer_id!==c.customer_id && x.customer_name===nm)){ msg.textContent='같은 담당자에게 이미 같은 이름의 거래처가 있습니다.'; return; }
+    const {error} = await sb.from('customers').update({name: nm, memo: mo||null}).eq('id', c.customer_id);
     if(error){ msg.textContent = /duplicate|unique|23505/.test(error.message+error.code) ? '같은 담당자에게 이미 같은 이름의 거래처가 있습니다.' : errMsg(error); return; }
-    toast(`이름을 '${nm}'(으)로 바꿨습니다.`); await refresh(true);
+    toast(nm!==c.customer_name ? `이름을 '${nm}'(으)로 바꿨습니다.` : '비고를 저장했습니다.'); await refresh(true);
   };
 }
 async function openCust(id, replace){ pushNav({v:'detail', id}, replace); S.custId=id; S.view='detail'; window.scrollTo(0,0); await viewDetail(); window.scrollTo(0,0); }
@@ -599,8 +606,8 @@ async function viewDetail(){
   const note = s.k==='block' ? `<div class="note"><b>${sd(c.block_start_date)}부터 주문이 막혀 있어요.</b><br>181일 넘은 미수 <b>${won(c.over_block)}원</b>을 받으면 ${nextItem?`풀리고, 다음 차단일은 ${sd(addDays(nextItem.entry_date, blockDays()))}예요.`:'풀려요.'}</div>`
     : s.k==='soon' ? `<div class="note o"><b>차단 D-${dd(c.block_start_date,S.base)} · ${fd(c.block_start_date)}부터 주문이 막혀요.</b><br>그 전에 ${sd(c.oldest_date)} 미수를 받으면 늦출 수 있어요.</div>`
     : s.k==='hold' ? `<div class="note o"><b>날짜를 모르는 미수 ${won(c.undated_remaining)}원이 있어요.</b><br>이전 거래장을 올리면 정확한 회전일이 나와요.</div>` : '';
-  app.innerHTML = header(c.customer_name, true, `<button class="btn sm ghost" onclick="editCustName()">${IC.pen}이름</button>`) + `<div class="wrap">
-    <div id="cnRow"></div>
+  app.innerHTML = header(c.customer_name, true, `<button class="btn sm ghost" onclick="editCustName()">${IC.pen}이름·비고</button>`) + `<div class="wrap">
+    <div id="cnRow"></div>${c.memo?`<div class="dmemo">📝 <b>${esc(c.memo)}</b></div>`:''}
     <div class="hero"><span class="tag ${s.k}">${s.t}</span>
       <div class="two"><div><div class="k">회전일</div><div class="v">${c.turnover_days??'-'}${c.turnover_days!=null?'<small>일</small>':''}</div></div>
         <div style="text-align:right;min-width:0"><div class="k">미수 잔액</div><div class="v" style="font-size:24px">${won(c.balance)}<small style="font-size:16px">원</small></div></div></div>
@@ -766,7 +773,7 @@ const isOther = c=> S.isAdmin && c.owner_id!==S.session.user.id;
 const custLabel = c=> isOther(c) ? `${c.customer_name} (담당: ${c.owner_name||'-'})` : c.customer_name;
 function custOptions(){
   const me=S.session.user.id, mineNames=new Set(S.summary.filter(c=>c.owner_id===me).map(c=>c.customer_name));
-  return S.summary.filter(c=>!isOther(c) || !mineNames.has(c.customer_name)).map(c=>`<option value="${esc(custLabel(c))}">`).join('');
+  return S.summary.filter(c=>!isOther(c) || !mineNames.has(c.customer_name)).map(c=>`<option value="${esc(custLabel(c))}"${c.memo?` label="${esc(c.memo)}"`:''}>`).join('');
 }
 // 입력 칸 글자 → 거래처 (본인 거래처 이름, 또는 관리자만 '병원명 (담당: 직원)')
 function findCust(text){
@@ -775,6 +782,10 @@ function findCust(text){
 }
 function custHint(c, bal){ if(!c) return '';
   return isOther(c) ? `${c.owner_name||'-'}님 거래처입니다.${bal!=null?` 지금 잔액 ${won(bal)}원에 이어서 계산합니다.`:''}` : (bal!=null?`기존 거래처입니다. 지금 잔액 ${won(bal)}원에 이어서 계산합니다.`:''); }
+// 이미 있는 거래처 이름을 넣었을 때: 어느 거래처에 이어지는지(비고 포함) + 다른 병원이면 이름을 다르게
+function existHtml(c, bal){ if(!c) return '';
+  return `<div class="exist"><b>이미 있는 거래처예요.</b> 기존 <b>${esc(c.customer_name)}</b>${c.memo?` (📝 ${esc(c.memo)})`:''}${isOther(c)?` · ${esc(c.owner_name||'-')}님 담당`:''}에 이어서 저장됩니다.${bal!=null?` 지금 잔액 ${won(bal)}원부터 계산해요.`:''}
+    <br><span class="muted">다른 지역의 ${esc(c.customer_name)}이면 이름을 “${esc(c.customer_name)}(지역)”처럼 다르게 넣어 주세요.</span></div>`; }
 // keep=true: 거래처 상세에서 누른 경우만 그 거래처 이름을 미리 채움. 첫 화면에서는 항상 빈칸
 function openEntry(keep){ pushNav({v:'entry', keep:!!keep}); if(!keep) S.entryCustName=''; S.view='entry'; viewEntry(); window.scrollTo(0,0); } // 새 화면은 맨 위부터
 function viewEntry(msg, ok){
@@ -802,7 +813,7 @@ function viewEntry(msg, ok){
   it.addEventListener('input', ()=>{ delete it.dataset.auto; });
   const fmt = el=>el.oninput=()=>{ const v=el.value.replace(/[^0-9]/g,''); el.value=v?Number(v).toLocaleString('ko-KR'):''; };
   fmt(am); fmt(lb);
-  const hint=()=>{ cnh.textContent = (()=>{ const c=findCust(cn.value); return c&&isOther(c)?custHint(c):''; })(); syncOwnerPick('ownE', cn.value); };
+  const hint=()=>{ cnh.innerHTML = existHtml(findCust(cn.value)); syncOwnerPick('ownE', cn.value); };
   cn.oninput=hint; hint();
   ef.onsubmit = async e=>{
     e.preventDefault(); const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
@@ -1018,7 +1029,8 @@ async function loadStartBal(){
     S.existList=(data||[]).map(e=>({k:entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount), lb:e.ledger_balance??null}));
     const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
   if(markExisting()) renderRows(); // 표시가 바뀐 줄이 있을 때만 다시 그림 (입력 중인 칸 보호)
-  document.getElementById('mstart').textContent = ex ? custHint(ex, S.startBal) : (name?'새 거래처로 만들어집니다.':''); syncOwnerPick('ownP', name);
+  const msEl=document.getElementById('mstart'); if(!msEl) return; // 화면을 벗어난 뒤 늦게 끝난 경우
+  msEl.innerHTML = ex ? existHtml(ex, S.startBal) : (name?'새 거래처로 만들어집니다.':''); syncOwnerPick('ownP', name);
   paintStatus();
 }
 function viewPaste(){
