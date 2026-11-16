@@ -146,12 +146,13 @@ async function readWith(model: string, key: string, b64: string, mediaType: stri
       model,
       max_tokens: 8000,
       tools: [TOOL],
-      tool_choice: { type: "tool", name: "ledger" },
+      // Sonnet 5.5는 도구 강제 호출(type "tool")을 지원하지 않음 → auto로 부르고 지시문으로 도구 호출을 요구
+      tool_choice: model === MODELS.fast ? { type: "tool", name: "ledger" } : { type: "auto" },
       messages: [{
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
-          { type: "text", text: PROMPT },
+          { type: "text", text: model === MODELS.fast ? PROMPT : PROMPT + "\n\n설명 없이 반드시 ledger 도구를 한 번 호출해서 결과를 돌려주세요." },
         ],
       }],
     }),
