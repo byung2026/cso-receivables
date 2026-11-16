@@ -808,7 +808,7 @@ function viewEntry(msg, ok){
     e.preventDefault(); const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
     const amtTxt = am.value.replace(/[^0-9]/g,''); const amt = Number(amtTxt); const name = cn.value.trim();
     if(amtTxt===''){ out.className='err'; out.textContent='금액을 입력하세요.'; return; }
-    if(!amt && kind!=='판매'){ out.className='err'; out.textContent='0원은 판매(첨부·무상 품목)만 저장할 수 있습니다.'; return; }
+    if(!amt && kind!=='판매' && kind!=='이월'){ out.className='err'; out.textContent='0원은 판매(첨부·무상 품목)와 이월만 저장할 수 있습니다.'; return; }
     if(kind!=='이월' && !dt.value){ out.className='err'; out.textContent='일자를 입력하세요.'; return; }
     try{
       const cid = await customerIdFor(name, pickedOwner('ownE'));
@@ -951,7 +951,7 @@ function rowError(r){
   if(r.flag==='date') return '날짜를 다시 골라주세요';
   if(!r.date && r.kind!=='이월') return '일자를 넣어주세요';
   if(r.amt==null) return '금액을 넣어주세요';
-  if(r.amt===0 && r.kind!=='판매') return '금액을 넣어주세요'; // 0원은 판매(첨부·무상 품목)만 허용
+  if(r.amt===0 && r.kind!=='판매' && r.kind!=='이월') return '금액을 넣어주세요'; // 0원은 판매(첨부·무상 품목)와 전기이월만 허용
   return '';
 }
 // 줄마다 계산 잔액·대조 결과 (저장 안 함·빈 줄 제외)
@@ -962,7 +962,7 @@ function evalRows(){
     if(r.skip) return {state:'skip'};
     const err = rowError(r); if(err) return {state:'err', msg:err};
     rb += isCredit(r.kind) ? -r.amt : r.amt;
-    if(r.amt===0 && (r.lb==null || r.lb===rb)) return {state:'ok', zero:true, rb, msg:`0원 품목 (첨부·무상) · 잔액 변동 없음${r.lb!=null?' ✓':''}`};
+    if(r.amt===0 && (r.lb==null || r.lb===rb)) return {state:'ok', zero:true, rb, msg: r.kind==='이월' ? `전기이월 0원 · 잔액 ${won(rb)}부터 시작${r.lb!=null?' ✓':''}` : `0원 품목 (첨부·무상) · 잔액 변동 없음${r.lb!=null?' ✓':''}`};
     if(r.lb==null) return {state:'ok', rb, msg:`계산 잔액 ${won(rb)}`};
     return r.lb===rb ? {state:'ok', rb, msg:`거래장 잔액과 일치 ✓`} : {state:'mis', rb, msg:`불일치 ⚠ 계산 ${won(rb)} / 거래장 ${won(r.lb)}`};
   });
