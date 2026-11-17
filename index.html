@@ -1509,11 +1509,22 @@ async function docAction(k, act){
     if(act==='view'){ if(w) w.location.href=url; else location.href=url; }
     else if(act==='save'){ const a=document.createElement('a'); a.href=url; a.download=f.name; a.rel='noopener'; document.body.appendChild(a); a.click(); setTimeout(()=>a.remove(), 1000); }
     else if(act==='share'){
-      if(navigator.canShare && navigator.canShare({files:[f]})) await navigator.share({files:[f], title:DOCS[k].title});
+      // 설명서 파일과 함께 접속 주소 문구도 보냄 (앱에 따라 문구가 빠지면 [주소 보내기]로 따로 보내면 됨)
+      const data={files:[f], title:DOCS[k].title, text:shareAddrText()};
+      if(navigator.canShare && navigator.canShare(data)) await navigator.share(data);
+      else if(navigator.canShare && navigator.canShare({files:[f]})) await navigator.share({files:[f], title:DOCS[k].title});
       else { const a=document.createElement('a'); a.href=url; a.download=f.name; a.click(); toast('이 기기는 바로 공유가 안 돼서 파일로 받았습니다. 받은 파일을 카톡 등으로 보내세요.'); }
     }
     setTimeout(()=>URL.revokeObjectURL(url), 60000);
   }catch(e){ if(w) w.close(); if(e && e.name==='AbortError') return; toast(errMsg(e)); }
+}
+// 동료에게 보내는 접속 주소 안내 문구
+function shareAddrText(){ return `[회전일 차트] 접속 주소\n${APP_URL}\n아이디와 비밀번호는 따로 보내 드린 것으로 로그인하세요.`; }
+async function shareAddr(){
+  const text=shareAddrText();
+  try{ if(navigator.share){ await navigator.share({text}); return; } }catch(e){ if(e && e.name==='AbortError') return; }
+  try{ await navigator.clipboard.writeText(text); toast('주소 안내를 복사했어요. 카톡 대화창에 붙여넣기 하세요.'); }
+  catch(_){ prompt('아래 내용을 복사해서 보내세요.', text); }
 }
 function openDocs(){
   if(!S.isAdmin){ go('dash'); return; }
@@ -1523,9 +1534,9 @@ function openDocs(){
       <div class="row" style="margin-top:12px">
         <button class="btn sm sec" onclick="docAction('${k}','view')">보기</button>
         <button class="btn sm sec" onclick="docAction('${k}','save')">PDF 받기</button>
-        ${d.share?`<button class="btn sm" onclick="docAction('${k}','share')">공유하기 (카톡·문자·메일)</button>`:'<span class="muted">동료에게 보내지 마세요</span>'}
+        ${d.share?`<button class="btn sm" onclick="docAction('${k}','share')">공유하기 (카톡·문자·메일)</button><button class="btn sm sec" onclick="shareAddr()">주소 보내기</button>`:'<span class="muted">동료에게 보내지 마세요</span>'}
       </div></div>`).join('')}
-    <div class="muted">설명서는 관리자만 이 화면에서 볼 수 있습니다. 동료에게는 사용 설명서 PDF를 공유해 주세요.</div>
+    <div class="muted">설명서는 관리자만 이 화면에서 볼 수 있습니다. 동료에게는 사용 설명서 PDF를 공유해 주세요. 공유할 때 접속 주소 문구도 함께 들어가고, 카톡에서 문구가 빠지면 [주소 보내기]로 주소만 따로 보낼 수 있어요.</div>
   </div>`;
 }
 
