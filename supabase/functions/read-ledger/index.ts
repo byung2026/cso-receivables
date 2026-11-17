@@ -138,7 +138,17 @@ function autoSwap(rows: Row[]) {
   return bad;
 }
 
-async function readWith(model: string, key: string, b64: string, mediaType: string) {
+// 회사 수수료율표 제품명 목록 → 흐린 품목명을 비슷한 모양의 다른 글자로 읽는 실수(티램정→티켐정 등) 방지
+function namesPrompt(names: string[]) {
+  if (!names.length) return "";
+  return `\n\n품목명 표기
+- 아래는 이 회사의 제품명 목록입니다. 거래장 품목명의 제품명 부분은 이 목록의 이름과 글자 하나까지 같게 적으세요. 글자가 흐리거나 비슷하게 생겨 헷갈리면(예: 램/켐, 캄/칼, 클/쿨, 겐/젠) 목록에 있는 이름으로 적으세요.
+- 포장 단위(500T, 30T(B), 28T(PTP), 100C, 50A, 10V, 3관 등)는 거래장에 찍힌 그대로 제품명 뒤에 붙여 적으세요. 예: "티램정 500T"
+- 목록에 없는 제품(다른 회사 제품 등)은 보이는 그대로 적고, 억지로 목록의 다른 이름으로 바꾸지 마세요.
+제품명 목록: ${names.join(", ")}`;
+}
+
+async function readWith(model: string, key: string, b64: string, mediaType: string, extra = "") {
   const res = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
@@ -152,7 +162,7 @@ async function readWith(model: string, key: string, b64: string, mediaType: stri
         role: "user",
         content: [
           { type: "image", source: { type: "base64", media_type: mediaType, data: b64 } },
-          { type: "text", text: model === MODELS.fast ? PROMPT : PROMPT + "\n\n설명 없이 반드시 ledger 도구를 한 번 호출해서 결과를 돌려주세요." },
+          { type: "text", text: (model === MODELS.fast ? PROMPT : PROMPT + "\n\n설명 없이 반드시 ledger 도구를 한 번 호출해서 결과를 돌려주세요.") + extra },
         ],
       }],
     }),
@@ -191,6 +201,10 @@ Deno.serve(async (req) => {
     if (de || !blob) return json({ error: "DOWNLOAD", message: "사진 파일을 불러오지 못했습니다." }, 404);
     const mediaType = ["image/jpeg", "image/png", "image/webp", "image/gif"].includes(blob.type) ? blob.type : "image/jpeg";
     const b64 = encodeBase64(new Uint8Array(await blob.arrayBuffer()));
+    // 제품명 목록 (못 불러와도 읽기는 계속)
+    const { data: pn, error: ne } = await sb.from("product_names").select("name");
+    if (ne) console.error("product_names load failed", ne.message);
+    const extra = namesPrompt((pn ?? []).map((r: { name: string }) => r.name));
 
     // 시도마다 모델·줄 수·불일치·시간·사용량·오류를 기록 (정밀 재확인이 실제로 도움이 되는지 나중에 집계)
     type Attempt = { model: string; ms: number; rows?: number; bad?: number; usage?: unknown; error?: string };
@@ -199,7 +213,7 @@ Deno.serve(async (req) => {
     let used = "haiku";
     let result: Awaited<ReturnType<typeof readWith>>;
     try {
-      result = await readWith(MODELS.fast, key, b64, mediaType);
+      result = await readWith(MODELS.fast, key, b64, mediaType, extra);
     } catch (e) {
       const msg = String((e as Error).message ?? e).slice(0, 300);
       attempts.push({ model: "haiku", ms: Date.now() - t0, error: msg });
@@ -214,7 +228,7 @@ Deno.serve(async (req) => {
     if (bad > 0 || result.rows.length === 0) {
       const t1 = Date.now();
       try {
-        const r2 = await readWith(MODELS.accurate, key, b64, mediaType);
+        const r2 = await readWith(MODELS.accurate, key, b64, mediaType, extra);
         const bad2 = autoSwap(r2.rows);
         attempts.push({ model: "sonnet", ms: Date.now() - t1, rows: r2.rows.length, bad: bad2, usage: r2.usage });
         if (r2.rows.length > 0 && bad2 <= bad) { result = r2; bad = bad2; used = "sonnet"; }

@@ -207,6 +207,7 @@ h3{font-size:16px;margin:0 0 10px;font-weight:800}
 .mgrid label{font-size:12.5px;color:var(--sub);display:block;min-width:0}
 .mgrid label .i{margin-top:3px;padding:10px}
 .mgrid .span2{grid-column:1/-1}
+.mnm{font-size:12.5px;margin-top:4px;line-height:1.45}.mnm:empty{display:none}.mnm.fx{color:var(--blue)}.mnm.uk{color:var(--org)}.mnm .btn{min-height:30px;padding:0 10px;margin-left:4px}
 .mst{font-size:13px;margin-top:6px;color:var(--sub)} .mrow.mis .mst{color:var(--org);font-weight:600} .mrow.err .mst{color:var(--red);font-weight:600} .mrow.ok .mst{color:var(--grn)}
 .toast{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(90px + env(safe-area-inset-bottom));background:#191F28;color:#fff;padding:11px 16px;border-radius:12px;font-size:14px;z-index:60;max-width:90vw}
 .empty{text-align:center;color:var(--mute);padding:40px 10px}
@@ -331,6 +332,73 @@ function status(c){
 }
 const ORDER = {block:0, soon:1, hold:2, ok:3, none:4};
 
+// 품목명 자동 교정 (앱 index.html에 같은 코드를 넣음)
+// 거래장 품목 = '제품명 + 포장단위' (예: '티램정 500T'). 앞의 제품명 부분을 회사 수수료율표 제품명과 비교한다.
+//  - 목록 이름으로 시작하면 그대로 (exact)
+//  - 한두 글자 차이(자모 기준)이고 가장 가까운 제품이 하나뿐이면 그 이름으로 바꿈 (fixed)
+//  - 규칙 사전(자주 틀리는 이름)에 있으면 바꿈 (alias)
+//  - 그 밖은 목록에 없는 이름으로 표시만 (unknown) — 수금·이월·할인 같은 적요는 검사 안 함
+function makeItemFixer(names, aliases) {
+  const norm = s => String(s || '').replace(/\s+/g, '').toLowerCase();
+  const jamo = s => { const out = []; for (const ch of s) { const c = ch.charCodeAt(0) - 0xAC00;
+    if (c >= 0 && c < 11172) { out.push('i' + Math.floor(c / 588), 'm' + Math.floor((c % 588) / 28)); if (c % 28) out.push('f' + (c % 28)); } else out.push(ch); } return out; };
+  const dist = (a, b) => { const m = a.length, n = b.length; let prev = Array.from({ length: n + 1 }, (_, j) => j);
+    for (let i = 1; i <= m; i++) { const cur = [i]; for (let j = 1; j <= n; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)); prev = cur; } return prev[n]; };
+  const digits = s => (s.match(/[0-9.\/]+/g) || []).join('|');
+  const list = [...new Set(names)].map(n => ({ name: n, k: norm(n), j: jamo(norm(n)), d: digits(norm(n)) })).filter(p => p.k).sort((a, b) => b.k.length - a.k.length);
+  const alias = new Map(Object.entries(aliases || {}).map(([a, b]) => [norm(a), b]).sort((x, y) => y[0].length - x[0].length)); // 긴 것부터
+  // 원래 문자열에서 공백을 뺀 n글자에 해당하는 위치 (공백·포장단위 표기는 원래대로 살리기 위함)
+  const cut = (s, n) => { let i = 0, c = 0; while (i < s.length && c < n) { if (!/\s/.test(s[i])) c++; i++; } return i; };
+  const SKIP = /^(카드|현금|계좌입금|입금|수금|전기이월|이월|매출할인|할인|반품)$/;
+  return function fix(item) {
+    const raw = String(item || '').trim(); const n = norm(raw);
+    if (!n || SKIP.test(n)) return { item: raw, st: 'skip' };
+    const ex = list.find(p => n.startsWith(p.k)); if (ex) return { item: raw, st: 'exact' };
+    if (list.some(p => p.k.startsWith(n))) return { item: raw, st: 'exact' }; // '리브솔주'처럼 용량을 뺀 이름
+    for (const [a, b] of alias) if (n.startsWith(a)) { const at = cut(raw, [...a].length); const rest = raw.slice(at);
+      if (/^\s*[0-9.]+\s*(mg|mcg|㎍|μg|iu)/i.test(rest) && !/[0-9]/.test(b)) continue; // 용량이 붙은 다른 약은 건드리지 않음
+      return { item: (b + rest).trim(), st: 'fixed', from: raw }; }
+    const nj = n;
+    let best = null, second = Infinity;
+    for (const p of list) {
+      let pb = Infinity, pl = 0;
+      for (let L = Math.max(1, [...p.k].length - 2); L <= [...p.k].length + 1; L++) {
+        const pre = [...nj].slice(0, L).join('');
+        if (digits(pre) !== p.d) continue; // 용량 숫자는 틀리면 안 됨 (375mg ↔ 625mg 같은 혼동 방지)
+        const d = dist(p.j, jamo(pre));
+        // 글자(음절) 단위로도 제한: 4글자 이하 이름은 1글자, 그보다 길면 2글자까지만 다를 때 교정
+        const sd = dist([...p.k], [...pre]); const hl = [...p.k.replace(/[^가-힣]/g, '')].length;
+        if (sd > (hl <= 4 ? 1 : 2)) continue;
+        if (d < pb) { pb = d; pl = L; }
+      }
+      if (pb < (best ? best.d : Infinity)) { if (best) second = Math.min(second, best.d); best = { p, d: pb, L: pl }; }
+      else if (pb < second) second = pb;
+    }
+    const allow = best ? (best.p.j.length <= 9 ? 2 : best.p.j.length <= 24 ? 3 : 4) : 0;
+    const at0 = best ? cut(raw, best.L) : 0;
+    const strengthAfter = best && !best.p.d && /^\s*[0-9.]+\s*(mg|mcg|㎍|μg|iu)/i.test(raw.slice(at0)); // 용량이 붙은 다른 약 (예: '티렌정50mg')
+    if (best && best.d > 0 && best.d <= allow && best.d < second && !strengthAfter) {
+      const at = at0; const rest = raw.slice(at);
+      return { item: (best.p.name + (rest && !/^\s/.test(rest) && /^[0-9]/.test(rest) ? ' ' : '') + rest).trim(), st: 'fixed', from: raw };
+    }
+    return { item: raw, st: 'unknown' };
+  };
+}
+// 제품명 목록(회사 수수료율표)·자주 틀리는 이름 사전 불러오기 — 실패해도 앱은 그대로 (교정만 안 함)
+S.pnames=[]; S.fixItem = it=>({item:String(it||'').trim(), st:'skip'});
+async function loadProductNames(){
+  try{
+    const [{data:pn}, {data:al}] = await Promise.all([sb.from('product_names').select('name'), sb.from('item_aliases').select('wrong,correct')]);
+    S.pnames = (pn||[]).map(r=>r.name).sort((a,b)=>a.localeCompare(b,'ko'));
+    if(S.pnames.length) S.fixItem = makeItemFixer(S.pnames, Object.fromEntries((al||[]).map(r=>[r.wrong, r.correct])));
+  }catch(_){}
+}
+const pnOptions = ()=> `<datalist id="pnl">${(S.pnames||[]).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
+// 줄의 품목명에 교정 적용: 고친 줄은 nameFrom(원래 읽은 글자), 목록에 없는 이름은 nameUnk 표시
+function applyItemFix(r){ if(!r.item || r.kind==='수금' || r.kind==='이월') return r; const o=S.fixItem(r.item);
+  if(o.st==='fixed'){ r.nameFrom=r.item; r.item=o.item; } else if(o.st==='unknown') r.nameUnk=true; return r; }
+const nameNote = r => r.nameFrom ? `🔤 품목명 자동 교정: <s>${esc(r.nameFrom)}</s> → <b>${esc(r.item)}</b>` : r.nameUnk ? '⚠ 회사 제품 목록에 없는 품목명 · 사진과 한 번 확인해 주세요' : '';
+
 // ===== 데이터 =====
 async function loadMe(){
   const uid = S.session.user.id;
@@ -341,6 +409,7 @@ async function loadMe(){
   S.isAdmin = adm === true; S.me = me || null;
   if(me && me.active===false){ S.loginMsg='사용 중지된 계정입니다. 관리자에게 문의하세요.'; await sb.auth.signOut(); throw Object.assign(new Error('사용 중지된 계정입니다. 관리자에게 문의하세요.'), {inactive:true}); }
   if(S.isAdmin) await loadMembers();
+  loadProductNames(); // 기다리지 않음 (화면은 바로 표시)
 }
 async function loadMembers(){ const {data} = await sb.from('members').select('*').order('display_name'); S.members = data || []; }
 async function loadSummary(){
@@ -819,7 +888,7 @@ function viewEntry(msg, ok){
     <div id="cnh" class="muted" style="margin-top:6px"></div>
     <div class="pair"><div><label class="f">일자 <span id="dh" class="muted"></span></label><input class="i" id="dt" type="date" value="${todayStr()}"></div>
       <div><label class="f">금액 (원)</label><input class="i" id="am" inputmode="numeric" required placeholder="0"></div></div>
-    <label class="f">품목 / 적요 (선택)</label><input class="i" id="it" placeholder="예: 하이알포르테주">
+    <label class="f">품목 / 적요 (선택)</label><input class="i" id="it" list="pnl" placeholder="예: 하이알포르테주" autocomplete="off">${pnOptions()}<div id="itn" class="mnm"></div>
     <label class="f">거래장 잔액 (선택 · 넣으면 자동 대조)</label><input class="i" id="lb" inputmode="numeric" placeholder="거래 후 잔액">
     <div style="margin-top:14px" class="row"><button class="btn grow">저장</button></div>
     <div id="em2" class="${ok?'ok':'err'}">${msg||''}</div>
@@ -831,7 +900,14 @@ function viewEntry(msg, ok){
     // 수금은 품목이 없으니 적요를 '수금'으로 자동 입력 (카드·현금 등으로 고쳐 써도 됨). 다른 구분으로 바꾸면 자동 입력분만 지움
     if(kind==='수금'){ if(!it.value.trim()) { it.value='수금'; it.dataset.auto='1'; } }
     else if(it.dataset.auto==='1' && it.value==='수금'){ it.value=''; delete it.dataset.auto; } });
-  it.addEventListener('input', ()=>{ delete it.dataset.auto; });
+  it.addEventListener('input', ()=>{ delete it.dataset.auto; itNote(); });
+  // 품목명 확인: 비슷한 회사 제품명이 있으면 [바꾸기] 안내, 목록에 없으면 알림만 (저장은 막지 않음)
+  function itNote(){ const n=document.getElementById('itn'); if(!n) return; const v=it.value.trim();
+    const o = (kind==='수금'||kind==='이월'||!v) ? {st:'skip'} : S.fixItem(v);
+    n.className='mnm '+(o.st==='fixed'?'fx':o.st==='unknown'?'uk':'');
+    n.innerHTML = o.st==='fixed' ? `혹시 <b>${esc(o.item)}</b>인가요? <button type="button" class="btn sm sec" id="itfix">바꾸기</button>`
+      : o.st==='unknown' && v.length>=2 ? '회사 제품 목록에 없는 품목명이에요. 오타가 없는지 확인해 주세요.' : '';
+    const b=document.getElementById('itfix'); if(b) b.onclick=()=>{ it.value=o.item; itNote(); }; }
   const fmt = el=>el.oninput=()=>{ const v=el.value.replace(/[^0-9]/g,''); el.value=v?Number(v).toLocaleString('ko-KR'):''; };
   fmt(am); fmt(lb);
   const hint=()=>{ cnh.innerHTML = existHtml(findCust(cn.value)); syncOwnerPick('ownE', cn.value); };
@@ -940,7 +1016,7 @@ async function readPhotos(items, onStatus){
     if(firstPhoto[key]==null) firstPhoto[key]=r._photo;
     const unc = !!r.unclear;
     // 흐린 줄은 빼지 않고 저장하되 '확인대기'로 (실제 거래가 조용히 빠지는 것 방지). 겹친 중복만 기본 '저장 안 함'
-    return {date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag: dup?'dup':unc?'unc':'', dup, unc, skip:dup, fixed:r.fixed||false, ph:r._photo}; });
+    return applyItemFix({date:r.date||null, kind:r.kind||'판매', amt:r.amount??null, item:r.item||'', lb:r.balance??null, flag: dup?'dup':unc?'unc':'', dup, unc, skip:dup, fixed:r.fixed||false, ph:r._photo}); });
   return {name, rows, failed, done, models:[...new Set(all.map(r=>r._model))]};
 }
 const KIND_MAP = {'판매':'판매','매출':'판매','출고':'판매','수금':'수금','입금':'수금','이월':'이월','전기이월':'이월','전월이월':'이월','반품':'반품','할인':'매출할인','매출할인':'매출할인'};
@@ -954,7 +1030,7 @@ function parsePaste(txt){
     let kind=KIND_MAP[(c[1]||'').replace(/\s/g,'')]||'판매';
     const d=parseDate(c[0]); let amt=num(c[2]);
     if(amt!=null && amt<0){ if(kind==='판매') kind=/할인/.test(c[3]||'')?'매출할인':'반품'; amt=Math.abs(amt); } // 거래장의 마이너스 판매 = 반품
-    return {date: d||null, kind, amt, item:(c[3]||'').trim(), lb:num(c[4]), flag: d===undefined?'date':'', skip:false};
+    return applyItemFix({date: d||null, kind, amt, item:(c[3]||'').trim(), lb:num(c[4]), flag: d===undefined?'date':'', skip:false});
   });
 }
 const isBlank = r => !r.amt && !r.item && r.lb==null;
@@ -1010,8 +1086,9 @@ function rowHtml(r,i){
       <label>구분<select class="i" data-f="kind">${['판매','수금','이월','반품','매출할인'].map(k=>`<option ${r.kind===k?'selected':''}>${k}</option>`).join('')}</select></label>
       <label>금액<input class="i" data-f="amt" inputmode="numeric" placeholder="0" value="${fmt(r.amt)}"></label>
       <label>거래장 잔액<input class="i" data-f="lb" inputmode="numeric" placeholder="선택" value="${fmt(r.lb)}"></label>
-      <label class="span2">품목 / 적요<input class="i" data-f="item" placeholder="예: 하이알포르테주" value="${esc(r.item||'')}"></label>
+      <label class="span2">품목 / 적요<input class="i" data-f="item" list="pnl" placeholder="예: 하이알포르테주" value="${esc(r.item||'')}"></label>
     </div>
+    <div class="mnm ${r.nameFrom?'fx':r.nameUnk?'uk':''}" data-nm>${nameNote(r)}</div>
     <div class="mst" data-st></div>
   </div>`;
 }
@@ -1029,6 +1106,7 @@ function paintStatus(){
   const nUnc = kept.filter(r=>r.unc).length, nFix = kept.filter(r=>r.fixed).length;
   document.getElementById('msum').innerHTML = `저장할 줄 <b>${save}</b>${bad?` · <span style="color:var(--red)">확인 필요 ${bad}</span>`:''}${skip?` · 저장 안 함 ${skip}`:''}`
     + (nUnc?` · 흐린 줄 ${nUnc}개는 확인대기로 저장`:'') + (nFix?` · 자동 교정 ${nFix}줄`:'')
+    + (kept.some(r=>r.nameFrom)?` · 품목명 교정 ${kept.filter(r=>r.nameFrom).length}줄`:'') + (kept.some(r=>r.nameUnk)?` · <span style="color:var(--org)">목록에 없는 품목명 ${kept.filter(r=>r.nameUnk).length}줄</span>`:'')
     + (ev.some(e=>e.state==='mis')?'<div class="muted">불일치 줄은 \'확인대기\'로 저장됩니다.</div>':'');
   const why = !name ? '거래처 이름을 넣으면 저장할 수 있어요.'
     : ev.some(e=>e.state==='err') ? '빨간 줄의 빈칸을 채우면 저장할 수 있어요.'
@@ -1067,7 +1145,7 @@ function viewPaste(){
     <div id="pthumbs" class="pthumbs"></div>
     <div id="pst" class="muted" style="margin-top:6px">여러 장이면 위에서부터 찍은 순서대로 고르세요. 읽은 결과가 아래 표에 채워지고, 틀린 칸만 고치면 됩니다.</div>
   </div>
-  <div id="rows"></div>
+  <div id="rows"></div>${pnOptions()}
   <button type="button" class="btn sec" id="addRow" style="width:100%">+ 줄 추가</button>
   <div class="muted" style="margin-top:8px">PC에서는 엑셀 표(일자·구분·금액·품목·거래장잔액)를 복사해 아무 칸에나 붙여넣으면 줄이 자동으로 채워집니다.</div>
   <div class="card" style="position:sticky;bottom:0;margin-bottom:0"><div id="msum" class="muted"></div>
@@ -1082,7 +1160,9 @@ function viewPaste(){
     if(f==='amt'||f==='lb'){ const v=num(el.value); r[f]=v==null?null:Math.abs(v); el.value = r[f]==null?'':r[f].toLocaleString('ko-KR'); }
     else if(f==='skip') r.skip = el.checked;
     else if(f==='date'){ r.date = el.value||null; if(r.flag==='date') r.flag=''; }
-    else r[f] = el.value;
+    else { r[f] = el.value;
+      if(f==='item'){ delete r.nameFrom; const o=S.fixItem(el.value); r.nameUnk = o.st==='unknown' && !['수금','이월'].includes(r.kind);
+        const nm=el.closest('.mrow').querySelector('[data-nm]'); nm.className='mnm '+(r.nameUnk?'uk':''); nm.innerHTML=nameNote(r); } }
     paintStatus();
   });
   box.addEventListener('change', e=>{
