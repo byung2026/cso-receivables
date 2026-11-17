@@ -82,6 +82,8 @@ textarea.i{min-height:160px;font-family:ui-monospace,Menlo,monospace;font-size:1
 .hero .d{font-size:13px;opacity:.88}
 .hero .mini{display:flex;gap:6px;margin-top:14px}
 .hero .mini>div{flex:1;background:rgba(255,255,255,.16);border-radius:12px;padding:8px 10px;min-width:0}
+.hero .mini>div:last-child{flex:1.7} /* 금액 칸은 넓게 (좁은 휴대폰에서 '15,572,000원'이 잘리지 않게) */
+@media (max-width:340px){.hero .mini>div{padding:8px 6px}.hero .mini .n{font-size:12.5px !important}}
 .hero .mini .l{font-size:11.5px;opacity:.92;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.hero .mini .n{font-size:15px;font-weight:800;margin-top:1px;white-space:nowrap}
 .hero .tag{display:inline-block;background:#fff;font-size:12.5px;font-weight:800;padding:4px 9px;border-radius:8px}
 .hero .tag.block{color:var(--red)}.hero .tag.soon{color:var(--org)}.hero .tag.ok{color:var(--blue)}.hero .tag.hold{color:#6A3FA0}.hero .tag.none{color:var(--gry)}
@@ -112,7 +114,11 @@ h2.sh .sp{flex:1}h2.sh .s{font-size:13px;color:var(--mute);font-weight:600}
 .sortbar button{flex:0 0 auto;font-size:13.5px;font-weight:600;min-height:44px;padding:0 14px;border-radius:20px;background:var(--chip);color:var(--sub);border:0;cursor:pointer;white-space:nowrap}
 .sortbar button.on{background:var(--ink);color:#fff}
 .qbox{display:flex;align-items:center;gap:8px;background:var(--chip);border-radius:12px;padding:0 12px;margin-bottom:8px;color:var(--mute)}
-.qbox input{flex:1;border:0;background:transparent;height:44px;font-size:16px;min-width:0;outline:none;color:var(--ink)}
+.qbox input{flex:1;border:0;background:transparent;height:44px;font-size:16px;min-width:0;outline:none;color:var(--ink);-webkit-appearance:none;appearance:none}
+.qbox:focus-within{box-shadow:0 0 0 2px var(--blue2) inset}
+.dist .bk .w{font-size:12px;color:var(--mute);font-weight:600;margin-top:1px;white-space:nowrap;letter-spacing:-.02em}
+.dist .bk:disabled .w{color:transparent}
+@media (max-width:370px){.dist .bk .k{font-size:12px;letter-spacing:-.03em}.dist .bk .w{font-size:11px}}
 /* 거래처 줄 */
 .cust{display:flex;justify-content:space-between;gap:10px;width:100%;text-align:left;background:none;border:0;border-bottom:1px solid var(--line);padding:14px 2px;cursor:pointer;color:inherit}
 .cust .m{min-width:0;flex:1}
@@ -248,7 +254,7 @@ h3{font-size:16px;margin:0 0 10px;font-weight:800}
 .ctg td{padding:11px 12px;border-bottom:1px solid var(--line)}.ctg td.n{text-align:right;font-weight:700;white-space:nowrap}.ctg tr:last-child td{border:0}.ctg .x2{color:var(--mute);font-weight:500;font-size:12.5px}
 .cfoot{font-size:12px;color:var(--mute);margin-top:12px;line-height:1.5}
 /* 좁은 화면(아이폰 SE 등): 요약 칸 글자 줄바꿈 */
-@media (max-width:370px){ .hero .mini .opt{display:none} .hero .mini>div{padding:8px} .hero .mini .l{font-size:11px} .hero .v{font-size:30px} .dist .bk .v{font-size:21px} }
+@media (max-width:370px){ .hero .mini .opt{display:none} .hero .mini>div{padding:8px} .hero .mini .l{font-size:11px} .hero .mini .n{font-size:14px;letter-spacing:-.02em} .hero .v{font-size:30px} .dist .bk .v{font-size:21px} }
 /* 넓은 화면(PC): 거래처 목록 2열 */
 @media (min-width:900px){ .clist{display:grid;grid-template-columns:1fr 1fr;column-gap:28px} }
 </style>
@@ -297,6 +303,10 @@ function md(s){ return fd(s); }
 // 차단 표시 통일: 30일 이내 'D-21', 그보다 멀면 '3월 4일 차단 예정', 지났으면 '차단됨'
 function blockTxt(c){ if(!c.block_start_date) return ''; const left=dd(c.block_start_date,S.base);
   if(Number(c.over_block)>0 || left<=0) return '차단됨'; return left<=30 ? `차단 D-${left}` : `${fd(c.block_start_date)} 차단 예정`; }
+// 저장 중복 방지: 저장하는 동안 버튼을 잠가서, 두 번 누르거나 Enter를 다시 눌러도 한 번만 저장됨 (끝나면 다시 누를 수 있음)
+function once(form, fn){ return async e=>{ e.preventDefault(); if(form.dataset.busy) return; form.dataset.busy='1';
+  const bs=[...form.querySelectorAll('button:not([type=button])')]; bs.forEach(b=>b.disabled=true);
+  try{ await fn(e); } finally { delete form.dataset.busy; bs.forEach(b=>b.disabled=false); } }; }
 function toast(msg){ const t=document.createElement('div'); t.className='toast'; t.textContent=msg; document.body.appendChild(t); setTimeout(()=>t.remove(),2600); }
 function errMsg(e){ const m=(e && (e.message||e.error_description||e.msg)) || String(e);
   if(/schema must be one of|PGRST106/.test(m)) return '서버 설정 확인 필요: Data API의 Exposed schemas에 receivables가 없습니다.';
@@ -451,21 +461,23 @@ function viewName(){
   app.innerHTML = `<div class="login"><h2>이름 등록</h2><div class="muted">회전일 차트에 표시될 이름입니다. (예: 홍길동)</div>
     <form id="nf" class="card"><label class="f">이름</label><input class="i" id="nm" required maxlength="20">
     <div style="margin-top:14px"><button class="btn" style="width:100%">시작하기</button></div><div id="nmm" class="err"></div></form></div>`;
-  document.getElementById('nf').onsubmit = async e=>{
-    e.preventDefault();
+  const nf=document.getElementById('nf');
+  nf.onsubmit = once(nf, async e=>{
     const {error} = await sb.from('members').insert({user_id:S.session.user.id, display_name:nm.value.trim()});
     if(error){ document.getElementById('nmm').textContent=errMsg(error); return; }
     start();
-  };
+  });
 }
 
 // ===== 현황판 =====
-const DIST = [ // 회전일 분포 칸: [키, 이름, 막대 색]
-  ['d30','30일','#4C8DFF'],['d60','60일','#6FB1FF'],['d90','90일','#5FD3E0'],['d120','120일','#7EDDB5'],
-  ['d150','150일','#F8C94A'],['d180','180일','#F59E3D'],['over_block','181일↑','#EF4444'],['undated_remaining','날짜 미상','#98A2B3']];
+const DIST = [ // 회전일 분포 칸: [키, 이름, 막대 색] — 120일까지 정상(파랑 계열, 오래될수록 진하게) · 150일 주의(노랑) · 180일 임박(주황) · 차단(빨강)
+  ['d30','30일','#A9C8FF'],['d60','60일','#7FAEFF'],['d90','90일','#4C8DFF'],['d120','120일','#1E5EF3'],
+  ['d150','150일','#F8C94A'],['d180','180일','#F59E3D'],['over_block','181일 이상','#EF4444'],['undated_remaining','날짜 미상','#98A2B3']];
 const BK_LABEL = {d30:'30일',d60:'60일',d90:'90일',d120:'120일',d150:'150일',d180:'180일',over_block:'181일 이상',undated_remaining:'날짜 미상',_soon:'곧 차단'};
 const TAGT = {block:'주문 차단', soon:'차단 임박', hold:'판정 보류', none:'미수금 없음'};
-// 회전일 태그 색 = 회전일 분포 막대 색과 같은 구간 색 (120일까지 파랑, 150일 노랑, 180일 주황, 181일↑ 빨강, 날짜 미상 회색)
+// 금액 짧게 (분포 칸처럼 좁은 곳): 1억 이상 '4.7억', 1만 이상 '3,200만', 그 밖 '9,000원'
+function wonShort(n){ n=Number(n)||0; if(n>=1e8) return (Math.round(n/1e7)/10).toLocaleString('ko-KR')+'억'; if(n>=1e4) return won(Math.round(n/1e4))+'만'; return won(n)+'원'; }
+// 회전일 태그 색 = 회전일 분포 막대 색과 같은 구간 색 (120일까지 파랑, 150일 노랑, 180일 주황, 181일 이상 빨강, 날짜 미상 회색)
 const TONE = {d30:'t-b',d60:'t-b',d90:'t-b',d120:'t-b',d150:'t-y',d180:'t-o',over_block:'t-r',undated_remaining:'t-g'};
 function custTag(c){ const k=c._s.k, t=c.turnover_days;
   if(k==='none') return `<span class="tag none">미수금 없음</span>`;
@@ -476,7 +488,20 @@ function custSub(c){
   if(c.last_input){ const ago=dd(todayStr(), c.last_input); parts.push(`<span class="${ago>STALE_DAYS?'old':''}">최근 입력 ${fd(c.last_input)}${ago>STALE_DAYS?` (${ago}일 전)`:''}</span>`); }
   return parts.map(x=>`<span style="white-space:nowrap">${x}</span>`).join(' · '); // 날짜가 중간에서 줄바꿈되지 않게
 }
+// 첫 화면: 검색창은 한 번만 그리고, 검색·정렬·구간 선택 때는 그 아래 내용만 다시 그림
+// (입력 중인 검색창을 새로 만들지 않아야 휴대폰에서 한글 조합이 깨지지 않고 포커스·스크롤도 그대로 유지됨)
 function viewDash(){
+  app.innerHTML = header('회전일 차트') + `<div class="wrap"><div id="dTop"></div>
+    <h2 class="sh" id="listTop" style="scroll-margin-top:70px">거래처 <span class="s" id="lcnt"></span></h2>
+    <div class="qbox">${IC.search}<input id="q" type="search" enterkeyhint="search" placeholder="거래처·비고 검색" value="${esc(S.q)}" autocomplete="off" autocorrect="off" spellcheck="false" aria-label="거래처 검색"></div>
+    <div id="dList"></div></div>` + bottomBar(false);
+  const qi=document.getElementById('q');
+  qi.oninput = ()=>{ S.q=qi.value.trim(); drawDash(); };
+  qi.onkeydown = e=>{ if(e.key==='Enter' && !e.isComposing) qi.blur(); }; // 휴대폰 키보드의 '검색'을 누르면 키보드 닫기
+  drawDash();
+}
+function drawDash(){
+  const top=document.getElementById('dTop'), lst=document.getElementById('dList'); if(!top || !lst) return viewDash();
   const base_ = S.summary.filter(c=>
     (S.ownerFilter==='all' || c.owner_id===S.ownerFilter) &&
     (!S.q || c.customer_name.includes(S.q) || (c.memo||'').includes(S.q))); // 비고로도 검색
@@ -494,47 +519,43 @@ function viewDash(){
   const owners = [...ownerMap.entries()];
   const nBlock=cnt('block'), nSoon=cnt('soon');
   const ownerName = S.ownerFilter==='all' ? '전체 담당자' : (ownerMap.get(S.ownerFilter)||'');
-  app.innerHTML = header('회전일 차트') + `<div class="wrap">
+  top.innerHTML = `
     <div class="hero"><div class="k">미수금 현황</div><div class="v">${won(sum(c=>c.balance))}<small>원</small></div>
-      <div class="d">기준일 ${fd(S.base)} · 거래처 ${base_.length}처${S.isAdmin?` · ${esc(ownerName)}`:''}</div>
+      <div class="d">기준일 ${fd(S.base)} · 거래처 ${base_.length}처${S.isAdmin?` · ${esc(ownerName)}`:''}${S.q?` · '${esc(S.q)}' 검색 중`:''}</div>
       <div class="mini"><div><div class="l">주문 차단</div><div class="n">${nBlock}처</div></div>
         <div><div class="l">곧 차단<span class="opt"> ${SOON_DAYS}일 내</span></div><div class="n">${nSoon}처</div></div>
-        <div><div class="l">181일 초과<span class="opt">분</span></div><div class="n">${won(sum(c=>c.over_block))}원</div></div></div></div>
+        <div><div class="l">181일 이상<span class="opt"> 미수</span></div><div class="n">${won(sum(c=>c.over_block))}원</div></div></div></div>
     <div class="chips">
       ${S.isAdmin?`<label class="chipsel">${IC.team}<select id="own" aria-label="담당자">${[['all','전체 담당자'],...owners].map(([id,n])=>`<option value="${id}" ${S.ownerFilter===id?'selected':''}>${esc(n)}</option>`).join('')}</select>${IC.down}</label>`:''}
       <label class="chipsel">${IC.cal}<input type="date" id="base" value="${S.base}" aria-label="기준일"></label>
     </div>
     <h2 class="sh">회전일 분포<span class="sp"></span><span class="s">누르면 해당 거래처만</span></h2>
-    <div class="dist">${DIST.map(([k,lbl,col])=>{ const n=base_.filter(c=>bucketOf(c)===k).length;
-      return `<button class="bk ${S.bucket===k?'sel':''}" onclick="pickBucket('${k}')" ${n?'':'disabled'}><div class="bar" style="background:${n?col:'#E4E7EC'}"></div><div class="k">${lbl}</div><div class="v">${n}<small>처</small></div></button>`; }).join('')}</div>
+    <div class="dist">${DIST.map(([k,lbl,col])=>{ const g=base_.filter(c=>bucketOf(c)===k), n=g.length;
+      return `<button class="bk ${S.bucket===k?'sel':''}" onclick="pickBucket('${k}')" ${n?'':'disabled'}><div class="bar" style="background:${n?col:'#E4E7EC'}"></div><div class="k">${lbl}</div><div class="v">${n}<small>처</small></div><div class="w">${n?wonShort(g.reduce((t,c)=>t+Number(c.balance||0),0)):'&nbsp;'}</div></button>`; }).join('')}</div>
     ${nBlock?`<button class="cta r ${S.bucket==='over_block'?'on':''}" onclick="pickBucket('over_block')">주문 차단 ${nBlock}처 확인하기 ${IC.arrow}</button>`:''}
-    ${nSoon?`<button class="cta o ${S.bucket==='_soon'?'on':''}" onclick="pickBucket('_soon')">곧 차단 ${nSoon}처 확인하기 ${IC.arrow}</button>`:''}
-    <h2 class="sh" id="listTop" style="scroll-margin-top:70px">거래처 <span class="s">${list.length}처</span><span class="sp"></span><button class="ib" onclick="toggleSearch()" aria-label="거래처 검색">${IC.search}</button></h2>
-    ${S.showQ||S.q?`<div class="qbox">${IC.search}<input id="q" placeholder="거래처 검색" value="${esc(S.q)}" autocomplete="off"></div>`:''}
-    <div class="sortbar">${[['turnDesc','회전일 긴 순'],['name','이름순'],['inputNew','최근 입력 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<button class="${(S.sort||'name')===v?'on':''}" onclick="setSort('${v}')">${t}</button>`).join('')}</div>
+    ${nSoon?`<button class="cta o ${S.bucket==='_soon'?'on':''}" onclick="pickBucket('_soon')">곧 차단 ${nSoon}처 확인하기 ${IC.arrow}</button>`:''}`;
+  document.getElementById('lcnt').textContent = `${list.length}처`;
+  lst.innerHTML = `
+    <div class="sortbar">${[['turnDesc','회전일 긴 순'],['amtDesc','미수금 큰 순'],['name','이름순'],['inputNew','최근 입력 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<button class="${(S.sort||'name')===v?'on':''}" onclick="setSort('${v}')">${t}</button>`).join('')}</div>
     ${S.bucket?`<div class="filt"><span class="grow">${BK_LABEL[S.bucket]} 거래처 ${list.length}처만 보는 중</span><button onclick="pickBucket(null)">전체 보기</button></div>`:''}
     <div class="clist">${list.length? list.map(c=>`<button class="cust" onclick="openCust('${c.customer_id}')">
         <div class="m"><span class="nm">${esc(c.customer_name)}</span>${c.memo?`<span class="memo">📝 ${esc(c.memo)}</span>`:''}
           <div class="tags">${custTag(c)}${c.pending_count>0?`<span class="tag warn">확인대기 ${c.pending_count}</span>`:''}${c.ledger_mismatch_count>0?`<span class="tag block">잔액 불일치 ${c.ledger_mismatch_count}</span>`:''}</div>
           <div class="s">${custSub(c)}</div></div>
         <div class="a">${won(c.balance)}원</div></button>`).join('')
-    : `<div class="empty">${S.summary.length?'조건에 맞는 거래처가 없습니다.':'아직 거래처가 없습니다.<br>아래 <b>거래 입력</b>으로 첫 거래를 넣으면 거래처가 자동으로 생깁니다.'}</div>`}</div>
-  </div>` + bottomBar(false);
-  base.onchange = async ()=>{ S.base = base.value || todayStr(); await refresh(); };
-  const qi=document.getElementById('q');
-  if(qi){ qi.oninput = ()=>{ S.q=qi.value.trim(); const p=qi.selectionStart; viewDash(); const nq=document.getElementById('q'); nq.focus(); nq.setSelectionRange(p,p); };
-    if(S.showQ && !S.q && S.focusQ){ S.focusQ=false; qi.focus(); } }
-  if(S.isAdmin) own.onchange = ()=>{ S.ownerFilter=own.value; viewDash(); };
+    : `<div class="empty">${S.q?`'${esc(S.q)}'(으)로 찾은 거래처가 없습니다.`:S.summary.length?'조건에 맞는 거래처가 없습니다.':'아직 거래처가 없습니다.<br>아래 <b>거래 입력</b>으로 첫 거래를 넣으면 거래처가 자동으로 생깁니다.'}</div>`}</div>`;
+  document.getElementById('base').onchange = async ev=>{ S.base = ev.target.value || todayStr(); await refresh(); };
+  if(S.isAdmin) document.getElementById('own').onchange = ev=>{ S.ownerFilter=ev.target.value; drawDash(); };
 }
-function toggleSearch(){ if(S.showQ||S.q){ S.showQ=false; S.q=''; } else { S.showQ=true; S.focusQ=true; } viewDash(); }
-function setSort(v){ S.sort=v; viewDash(); }
+function setSort(v){ S.sort=v; drawDash(); }
 
-// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 / 최근 입력 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
+// 정렬: 기본 이름순 / 회전일 긴 순 / 미수금 큰 순 / 회전일 짧은 순 / 최근 입력 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
 function sortList(arr){
   const byName = (a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko');
   const t = c => Number(c.balance)>0 && c.turnover_days!=null ? Number(c.turnover_days) : null;
   const mode = S.sort || 'name';
   if(mode==='name') return [...arr].sort(byName);
+  if(mode==='amtDesc') return [...arr].sort((a,b)=> (Number(b.balance)||0)-(Number(a.balance)||0) || byName(a,b)); // 회수 우선순위: 미수금 많은 거래처부터
   if(mode==='inputNew') return [...arr].sort((a,b)=> (b.last_input||'').localeCompare(a.last_input||'') || byName(a,b)); // 최근에 입력한 거래처가 맨 위, 입력 없는 거래처는 맨 뒤
   return [...arr].sort((a,b)=>{ const x=t(a), y=t(b);
     if(x==null && y==null) return byName(a,b); if(x==null) return 1; if(y==null) return -1;
@@ -548,7 +569,7 @@ function bucketOf(c){
   if(t >= blockDays()) return 'over_block';
   return t<=30?'d30': t<=60?'d60': t<=90?'d90': t<=120?'d120': t<=150?'d150':'d180';
 }
-function pickBucket(k){ S.bucket = (k && S.bucket!==k) ? k : null; viewDash(); if(S.bucket) document.getElementById('listTop')?.scrollIntoView({behavior:'smooth', block:'start'}); }
+function pickBucket(k){ S.bucket = (k && S.bucket!==k) ? k : null; drawDash(); if(S.bucket) document.getElementById('listTop')?.scrollIntoView({behavior:'smooth', block:'start'}); }
 
 // ===== 거래처 상세 =====
 // 거래처 이름 변경 (담당자 본인 또는 관리자). 거래 내역·사진·담당자는 그대로
@@ -562,8 +583,9 @@ function editCustName(){
     <button class="btn sm">저장</button><button type="button" class="btn sm sec" onclick="viewDetail()">취소</button>
     <div id="cnMsg" class="err" style="flex-basis:100%"></div></form>`;
   const inp=document.getElementById('cnIn'); inp.focus(); inp.select();
-  document.getElementById('cnf').onsubmit = async e=>{
-    e.preventDefault(); const nm = inp.value.trim().replace(/\s+/g,' '); const msg=document.getElementById('cnMsg');
+  const cnf=document.getElementById('cnf');
+  cnf.onsubmit = once(cnf, async e=>{
+    const nm = inp.value.trim().replace(/\s+/g,' '); const msg=document.getElementById('cnMsg');
     const mo = document.getElementById('cmIn').value.trim().replace(/\s+/g,' ');
     if(!nm){ msg.textContent='이름을 입력하세요.'; return; }
     if(nm===c.customer_name && mo===(c.memo||'')){ viewDetail(); return; }
@@ -571,7 +593,7 @@ function editCustName(){
     const {error} = await sb.from('customers').update({name: nm, memo: mo||null}).eq('id', c.customer_id);
     if(error){ msg.textContent = /duplicate|unique|23505/.test(error.message+error.code) ? '같은 담당자에게 이미 같은 이름의 거래처가 있습니다.' : errMsg(error); return; }
     toast(nm!==c.customer_name ? `이름을 '${nm}'(으)로 바꿨습니다.` : '비고를 저장했습니다.'); await refresh(true);
-  };
+  });
 }
 async function openCust(id, replace){ pushNav({v:'detail', id}, replace); S.custId=id; S.view='detail'; window.scrollTo(0,0); await viewDetail(); window.scrollTo(0,0); }
 function runCheck(entries){
@@ -601,9 +623,9 @@ async function viewDetail(){
   S.detItems = items; S.detBucket = null; S.detEntries = entries; S.ordN = PAGE; S.entN = PAGE;
   const s=c._s;
   const bd = ([k,lbl,col])=>{ const v=Number(c[k])||0; return `<button class="bk amt ${v>0?'tap':'zero'}" data-bk="${k}" data-lbl="${lbl}" ${v>0?'':'tabindex="-1"'}><div class="bar" style="background:${v>0?col:'#E4E7EC'}"></div><div class="k">${lbl}</div><div class="v">${won(v)}</div></button>`; };
-  // 차단 안내: 181일 넘은 미수를 받으면 풀리고, 다음 차단일 = 그다음 오래된 채권 + 181일
+  // 차단 안내: 181일 이상 된 미수를 받으면 풀리고, 다음 차단일 = 그다음 오래된 채권 + 181일
   const nextItem = items.find(i=>i.entry_date && i.age_days!=null && i.age_days < blockDays());
-  const note = s.k==='block' ? `<div class="note"><b>${sd(c.block_start_date)}부터 주문이 막혀 있어요.</b><br>181일 넘은 미수 <b>${won(c.over_block)}원</b>을 받으면 ${nextItem?`풀리고, 다음 차단일은 ${sd(addDays(nextItem.entry_date, blockDays()))}예요.`:'풀려요.'}</div>`
+  const note = s.k==='block' ? `<div class="note"><b>${sd(c.block_start_date)}부터 주문이 막혀 있어요.</b><br>181일 이상 된 미수 <b>${won(c.over_block)}원</b>을 받으면 ${nextItem?`풀리고, 다음 차단일은 ${sd(addDays(nextItem.entry_date, blockDays()))}예요.`:'풀려요.'}</div>`
     : s.k==='soon' ? `<div class="note o"><b>차단 D-${dd(c.block_start_date,S.base)} · ${fd(c.block_start_date)}부터 주문이 막혀요.</b><br>그 전에 ${sd(c.oldest_date)} 미수를 받으면 늦출 수 있어요.</div>`
     : s.k==='hold' ? `<div class="note o"><b>날짜를 모르는 미수 ${won(c.undated_remaining)}원이 있어요.</b><br>이전 거래장을 올리면 정확한 회전일이 나와요.</div>` : '';
   app.innerHTML = header(c.customer_name, true, `<button class="btn sm ghost" onclick="editCustName()">${IC.pen}이름·비고</button>`) + `<div class="wrap">
@@ -815,8 +837,8 @@ function viewEntry(msg, ok){
   fmt(am); fmt(lb);
   const hint=()=>{ cnh.innerHTML = existHtml(findCust(cn.value)); syncOwnerPick('ownE', cn.value); };
   cn.oninput=hint; hint();
-  ef.onsubmit = async e=>{
-    e.preventDefault(); const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
+  ef.onsubmit = once(ef, async e=>{
+    const out=document.getElementById('em2'); out.className='muted'; out.textContent='저장 중...';
     const amtTxt = am.value.replace(/[^0-9]/g,''); const amt = Number(amtTxt); const name = cn.value.trim();
     if(amtTxt===''){ out.className='err'; out.textContent='금액을 입력하세요.'; return; }
     if(!amt && kind!=='판매' && kind!=='이월'){ out.className='err'; out.textContent='0원은 판매(첨부·무상 품목)와 이월만 저장할 수 있습니다.'; return; }
@@ -832,7 +854,7 @@ function viewEntry(msg, ok){
       await refresh(false);
       viewEntry(`${name.replace(/ \(담당: .*\)$/,'')}: 저장했습니다. ${chk}`, !/불일치/.test(chk));
     }catch(er){ out.className='err'; out.textContent=errMsg(er); }
-  };
+  });
 }
 async function customerIdFor(name, owner){
   const found = findCust(name); // 관리자가 '병원명 (담당: 직원)'을 고르면 그 직원 거래처에 저장 (담당자는 그대로)
@@ -1222,7 +1244,7 @@ async function doExport(who){
   const toDate=s=> s? new Date(s+'T00:00:00Z') : null;
   ws.getCell('A1').value='회전일 차트 · 거래처 요약'+(who==='all'?'':` (${label})`); ws.getCell('A1').font={...F, size:14, bold:true};
   ws.getCell('A2').value=`기준일 ${S.base}  ·  회전일 = 가장 오래된 미수(선입선출) 경과일  ·  ${blockDays()}일부터 주문 차단`; ws.getCell('A2').font={...F, color:{argb:'FF5B6576'}};
-  const H=['거래처','담당자','판정','미수 잔액','회전일','30일\n(0~30)','60일\n(31~60)','90일\n(61~90)','120일\n(91~120)','150일\n(121~150)',`180일\n(151~${blockDays()-1})`,`${blockDays()}일↑\n(차단)`,'날짜 미상','마지막\n주문 가능일','차단 시작','최근 입력'];
+  const H=['거래처','담당자','판정','미수 잔액','회전일','30일\n(0~30)','60일\n(31~60)','90일\n(61~90)','120일\n(91~120)','150일\n(121~150)',`180일\n(151~${blockDays()-1})`,`${blockDays()}일 이상\n(차단)`,'날짜 미상','마지막\n주문 가능일','차단 시작','최근 입력'];
   const W=[16,12,10,13,11,12,12,12,12,12,12,12,10,12,12,12]; W.forEach((w,i)=>ws.getColumn(i+1).width=w);
   const hr=ws.getRow(4); hr.height=32;
   H.forEach((h,i)=>{ const c=hr.getCell(i+1); c.value=h; c.font={...F, bold:true, color:{argb:'FFFFFFFF'}}; c.fill=fill('FF1F3A6E'); c.alignment={horizontal:'center', vertical:'middle', wrapText:true}; c.border=BOX; });
