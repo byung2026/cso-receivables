@@ -350,7 +350,7 @@ function makeItemFixer(names, aliases) {
   // 원래 문자열에서 공백을 뺀 n글자에 해당하는 위치 (공백·포장단위 표기는 원래대로 살리기 위함)
   const cut = (s, n) => { let i = 0, c = 0; while (i < s.length && c < n) { if (!/\s/.test(s[i])) c++; i++; } return i; };
   const SKIP = /^(카드|현금|계좌입금|입금|수금|전기이월|이월|매출할인|할인|반품)$/;
-  return function fix(item) {
+  function fix(item) {
     const raw = String(item || '').trim(); const n = norm(raw);
     if (!n || SKIP.test(n)) return { item: raw, st: 'skip' };
     const ex = list.find(p => n.startsWith(p.k)); if (ex) return { item: raw, st: 'exact' };
@@ -363,7 +363,8 @@ function makeItemFixer(names, aliases) {
     for (const p of list) {
       let pb = Infinity, pl = 0;
       for (let L = Math.max(1, [...p.k].length - 2); L <= [...p.k].length + 1; L++) {
-        const pre = [...nj].slice(0, L).join('');
+        const chars = [...nj]; const pre = chars.slice(0, L).join('');
+        if (/[가-힣]/.test(chars[L] || '')) continue; // 단어 중간에서 끊지 않음 (예: '하이알포|르태'를 '하이알주'로 보면 안 됨)
         if (digits(pre) !== p.d) continue; // 용량 숫자는 틀리면 안 됨 (375mg ↔ 625mg 같은 혼동 방지)
         const d = dist(p.j, jamo(pre));
         // 글자(음절) 단위로도 제한: 4글자 이하 이름은 1글자, 그보다 길면 2글자까지만 다를 때 교정
@@ -379,10 +380,21 @@ function makeItemFixer(names, aliases) {
     const strengthAfter = best && !best.p.d && /^\s*[0-9.]+\s*(mg|mcg|㎍|μg|iu)/i.test(raw.slice(at0)); // 용량이 붙은 다른 약 (예: '티렌정50mg')
     if (best && best.d > 0 && best.d <= allow && best.d < second && !strengthAfter) {
       const at = at0; const rest = raw.slice(at);
-      return { item: (best.p.name + (rest && !/^\s/.test(rest) && /^[0-9]/.test(rest) ? ' ' : '') + rest).trim(), st: 'fixed', from: raw };
+      return { item: (best.p.name + (rest && !/^\s/.test(rest) && /^[0-9]/.test(rest) ? ' ' : '') + rest).trim(), st: 'fixed', from: raw,
+        learn: { wrong: raw.slice(0, at).trim(), correct: best.p.name } }; // 처음 본 오타 → 오타 사전에 등록
     }
     return { item: raw, st: 'unknown' };
+  }
+  // 목록에 없던 이름(old)을 사람이 회사 제품명(neu)으로 고친 경우 → 오타 사전에 넣을 (오타, 바른 이름). 포장 단위가 같을 때만
+  fix.learnFrom = (old, neu) => {
+    const o = norm(old), n = norm(neu); const p = list.find(x => n.startsWith(x.k)); if (!p || !o) return null;
+    const pack = n.slice(p.k.length); if (pack && !o.endsWith(pack)) return null;
+    const wrong = o.slice(0, o.length - pack.length);
+    if ([...wrong].length < 2 || wrong === p.k || list.some(x => wrong.startsWith(x.k))) return null;
+    const pj = jamo(p.k); if (dist(pj, jamo(wrong)) > pj.length * 0.5) return null; // 글자 모양이 비슷할 때만 (다른 약으로 바꾼 경우는 오타가 아님)
+    return { wrong, correct: p.name };
   };
+  return fix;
 }
 // 제품명 목록(회사 수수료율표)·자주 틀리는 이름 사전 불러오기 — 실패해도 앱은 그대로 (교정만 안 함)
 S.pnames=[]; S.fixItem = it=>({item:String(it||'').trim(), st:'skip'});
@@ -396,7 +408,15 @@ async function loadProductNames(){
 const pnOptions = ()=> `<datalist id="pnl">${(S.pnames||[]).map(n=>`<option value="${esc(n)}">`).join('')}</datalist>`;
 // 줄의 품목명에 교정 적용: 고친 줄은 nameFrom(원래 읽은 글자), 목록에 없는 이름은 nameUnk 표시
 function applyItemFix(r){ if(!r.item || r.kind==='수금' || r.kind==='이월') return r; const o=S.fixItem(r.item);
-  if(o.st==='fixed'){ r.nameFrom=r.item; r.item=o.item; } else if(o.st==='unknown') r.nameUnk=true; return r; }
+  if(o.st==='fixed'){ r.nameFrom=r.item; r.item=o.item; r.learn=o.learn||null; } else if(o.st==='unknown'){ r.nameUnk=true; r.readItem=r.item; } return r; }
+// 오타 사전에 등록 (회사 제품명으로 고친 것만 서버가 받아줌). 실패해도 저장에는 영향 없음
+async function learnAliases(pairs){
+  const seen=new Set(); const list=pairs.filter(x=>x && x.wrong && x.correct && !seen.has(x.wrong) && seen.add(x.wrong));
+  if(!list.length) return;
+  try{ await Promise.all(list.map(x=>sb.rpc('learn_item_alias', {p_wrong:x.wrong, p_correct:x.correct}))); await loadProductNames(); }catch(_){}
+}
+// 줄에서 배울 오타: 자동 교정된 줄, 또는 목록에 없던 이름을 사람이 회사 제품명으로 고친 줄
+const learnOf = r => r.learn || (r.readItem && S.fixItem.learnFrom ? S.fixItem.learnFrom(r.readItem, r.item) : null);
 const nameNote = r => r.nameFrom ? `🔤 품목명 자동 교정: <s>${esc(r.nameFrom)}</s> → <b>${esc(r.item)}</b>` : r.nameUnk ? '⚠ 회사 제품 목록에 없는 품목명 · 사진과 한 번 확인해 주세요' : '';
 
 // ===== 데이터 =====
@@ -905,9 +925,8 @@ function viewEntry(msg, ok){
   function itNote(){ const n=document.getElementById('itn'); if(!n) return; const v=it.value.trim();
     const o = (kind==='수금'||kind==='이월'||!v) ? {st:'skip'} : S.fixItem(v);
     n.className='mnm '+(o.st==='fixed'?'fx':o.st==='unknown'?'uk':'');
-    n.innerHTML = o.st==='fixed' ? `혹시 <b>${esc(o.item)}</b>인가요? <button type="button" class="btn sm sec" id="itfix">바꾸기</button>`
-      : o.st==='unknown' && v.length>=2 ? '회사 제품 목록에 없는 품목명이에요. 오타가 없는지 확인해 주세요.' : '';
-    const b=document.getElementById('itfix'); if(b) b.onclick=()=>{ it.value=o.item; itNote(); }; }
+    n.innerHTML = o.st==='fixed' ? `저장할 때 <b>${esc(o.item)}</b>(으)로 고쳐서 저장돼요.`
+      : o.st==='unknown' && v.length>=2 ? '회사 제품 목록에 없는 품목명이에요. 입력한 그대로 저장돼요.' : ''; }
   const fmt = el=>el.oninput=()=>{ const v=el.value.replace(/[^0-9]/g,''); el.value=v?Number(v).toLocaleString('ko-KR'):''; };
   fmt(am); fmt(lb);
   const hint=()=>{ cnh.innerHTML = existHtml(findCust(cn.value)); syncOwnerPick('ownE', cn.value); };
@@ -920,14 +939,17 @@ function viewEntry(msg, ok){
     if(kind!=='이월' && !dt.value){ out.className='err'; out.textContent='일자를 입력하세요.'; return; }
     try{
       const cid = await customerIdFor(name, pickedOwner('ownE'));
-      const row = {customer_id:cid, kind, entry_date: dt.value||null, item: it.value.trim()||null,
+      const fx = (kind==='수금'||kind==='이월') ? {st:'skip'} : S.fixItem(it.value.trim()); // 품목명 오타는 회사 제품명으로 고쳐 저장
+      const itemV = (fx.st==='fixed' ? fx.item : it.value.trim()) || null;
+      const row = {customer_id:cid, kind, entry_date: dt.value||null, item: itemV,
         sale_amount: isCredit(kind)?0:amt, pay_amount: isCredit(kind)?amt:0,
         ledger_balance: lb.value? Number(lb.value.replace(/[^0-9-]/g,'')) : null, input_method:'직접', status:'확정'};
       const {error} = await sb.from('entries').insert(row); if(error) throw error;
       S.entryCustName = ''; // 저장 후 다음 입력은 거래처 칸을 비워서 시작
       const chk = await ledgerCheck(cid, row.ledger_balance);
       await refresh(false);
-      viewEntry(`${name.replace(/ \(담당: .*\)$/,'')}: 저장했습니다. ${chk}`, !/불일치/.test(chk));
+      if(fx.st==='fixed') learnAliases([fx.learn]);
+      viewEntry(`${name.replace(/ \(담당: .*\)$/,'')}: 저장했습니다.${fx.st==='fixed'?` 품목명 '${esc(fx.from)}' → '${esc(fx.item)}'(으)로 고쳤습니다.`:''} ${chk}`, !/불일치/.test(chk));
     }catch(er){ out.className='err'; out.textContent=errMsg(er); }
   });
 }
@@ -1161,7 +1183,7 @@ function viewPaste(){
     else if(f==='skip') r.skip = el.checked;
     else if(f==='date'){ r.date = el.value||null; if(r.flag==='date') r.flag=''; }
     else { r[f] = el.value;
-      if(f==='item'){ delete r.nameFrom; const o=S.fixItem(el.value); r.nameUnk = o.st==='unknown' && !['수금','이월'].includes(r.kind);
+      if(f==='item'){ delete r.nameFrom; delete r.learn; const o=S.fixItem(el.value); r.nameUnk = o.st==='unknown' && !['수금','이월'].includes(r.kind);
         const nm=el.closest('.mrow').querySelector('[data-nm]'); nm.className='mnm '+(r.nameUnk?'uk':''); nm.innerHTML=nameNote(r); } }
     paintStatus();
   });
@@ -1238,6 +1260,7 @@ function viewPaste(){
       let phWarn='';
       if(S.photoIds.some(Boolean)){ const {error:pe}=await sb.from('photos').update({status:'확인완료', customer_id:cid}).in('id', S.photoIds.filter(Boolean));
         if(pe) phWarn=' (사진 상태 기록은 실패했어요. 거래는 저장됐습니다)'; } // 거래 저장은 끝났으니 다시 누르지 않게 성공으로 처리
+      learnAliases(S.rows.filter((r,i)=>ev[i].state==='ok'||ev[i].state==='mis').map(learnOf)); // 기다리지 않음
       S.entryCustName=''; await refresh(false); toast(`${ins.length}줄 저장했습니다.${phWarn}`);
       const c=S.summary.find(x=>x.customer_id===cid); if(c){ openCust(cid, true); } else go('dash');
     }catch(er){ perr.textContent=errMsg(er); ps.disabled=false; }
