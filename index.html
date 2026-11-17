@@ -536,7 +536,7 @@ function drawDash(){
     ${nSoon?`<button class="cta o ${S.bucket==='_soon'?'on':''}" onclick="pickBucket('_soon')">곧 차단 ${nSoon}처 확인하기 ${IC.arrow}</button>`:''}`;
   document.getElementById('lcnt').textContent = `${list.length}처`;
   lst.innerHTML = `
-    <div class="sortbar">${[['turnDesc','회전일 긴 순'],['amtDesc','미수금 큰 순'],['name','이름순'],['inputNew','최근 입력 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<button class="${(S.sort||'name')===v?'on':''}" onclick="setSort('${v}')">${t}</button>`).join('')}</div>
+    <div class="sortbar">${[['turnDesc','회전일 긴 순'],['name','이름순'],['inputNew','최근 입력 순'],['turnAsc','회전일 짧은 순']].map(([v,t])=>`<button class="${(S.sort||'name')===v?'on':''}" onclick="setSort('${v}')">${t}</button>`).join('')}</div>
     ${S.bucket?`<div class="filt"><span class="grow">${BK_LABEL[S.bucket]} 거래처 ${list.length}처만 보는 중</span><button onclick="pickBucket(null)">전체 보기</button></div>`:''}
     <div class="clist">${list.length? list.map(c=>`<button class="cust" onclick="openCust('${c.customer_id}')">
         <div class="m"><span class="nm">${esc(c.customer_name)}</span>${c.memo?`<span class="memo">📝 ${esc(c.memo)}</span>`:''}
@@ -549,13 +549,12 @@ function drawDash(){
 }
 function setSort(v){ S.sort=v; drawDash(); }
 
-// 정렬: 기본 이름순 / 회전일 긴 순 / 미수금 큰 순 / 회전일 짧은 순 / 최근 입력 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
+// 정렬: 기본 이름순 / 회전일 긴 순 / 회전일 짧은 순 / 최근 입력 순 (미수금 없는 거래처는 회전일 정렬에서 맨 뒤)
 function sortList(arr){
   const byName = (a,b)=> a.customer_name.localeCompare(b.customer_name,'ko') || (a.owner_name||'').localeCompare(b.owner_name||'','ko');
   const t = c => Number(c.balance)>0 && c.turnover_days!=null ? Number(c.turnover_days) : null;
   const mode = S.sort || 'name';
   if(mode==='name') return [...arr].sort(byName);
-  if(mode==='amtDesc') return [...arr].sort((a,b)=> (Number(b.balance)||0)-(Number(a.balance)||0) || byName(a,b)); // 회수 우선순위: 미수금 많은 거래처부터
   if(mode==='inputNew') return [...arr].sort((a,b)=> (b.last_input||'').localeCompare(a.last_input||'') || byName(a,b)); // 최근에 입력한 거래처가 맨 위, 입력 없는 거래처는 맨 뒤
   return [...arr].sort((a,b)=>{ const x=t(a), y=t(b);
     if(x==null && y==null) return byName(a,b); if(x==null) return 1; if(y==null) return -1;
