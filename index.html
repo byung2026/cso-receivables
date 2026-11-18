@@ -1474,14 +1474,28 @@ async function setActive(uid, on){
   if(error){ let msg=error.message; try{ const b=await error.context.json(); msg=b.message||msg; }catch(_){} toast(msg); return; }
   await viewTeam(); toast(on ? `${m.display_name}님 계정을 다시 사용합니다.` : `${m.display_name}님 계정을 사용 중지했습니다.`);
 }
-async function resetPw(uid){
+// 비번 초기화: 바로 바꾸지 않고, 그 동료 줄 아래에 임시 비밀번호 칸을 열어 관리자가 정하거나 자동으로 만든 뒤 [초기화]
+function resetPw(uid){
   const m = S.members.find(x=>x.user_id===uid); if(!m) return;
-  if(!confirm(`${m.display_name}님의 비밀번호를 새 임시 비밀번호로 바꿀까요?\n(지금 쓰던 비밀번호로는 더 이상 로그인할 수 없습니다)`)) return;
-  const pwv = tempPw();
-  const {error} = await sb.functions.invoke('manage-member', {body:{action:'reset', user_id:uid, password:pwv}});
-  if(error){ let msg=error.message; try{ const b=await error.context.json(); msg=b.message||msg; }catch(_){} toast(msg); return; }
-  await viewTeam(null, true, {title:`${m.display_name}님 비밀번호를 초기화했습니다.`, id:shownId(m.login_id), pw:pwv});
-  window.scrollTo(0,0);
+  document.querySelectorAll('tr.rpw').forEach(x=>x.remove());
+  const tr = document.getElementById('mn-'+uid)?.closest('tr'); if(!tr) return;
+  tr.insertAdjacentHTML('afterend', `<tr class="rpw"><td colspan="3"><form id="rpf" style="background:var(--soft);border-radius:12px;padding:12px;margin:4px 0">
+    <div style="font-weight:700;margin-bottom:4px">${esc(m.display_name)}님 새 임시 비밀번호</div>
+    <div class="muted" style="font-size:12.5px;margin-bottom:8px">숫자 6자리가 자동으로 채워져 있어요. 원하는 번호로 바꿔도 됩니다(6자 이상). 초기화하면 지금 쓰던 비밀번호로는 로그인할 수 없어요.</div>
+    <div class="row" style="gap:8px"><input class="i grow" id="rpIn" required minlength="6" inputmode="numeric" value="${tempPw()}" autocomplete="off" autocapitalize="off" spellcheck="false">
+      <button type="button" class="btn sm sec" onclick="document.getElementById('rpIn').value=tempPw()">자동 만들기</button></div>
+    <div class="row" style="gap:8px;margin-top:8px"><button class="btn sm" id="rpGo">초기화</button><button type="button" class="btn sm sec" onclick="this.closest('tr').remove()">취소</button></div>
+    <div id="rpMsg" class="err"></div></form></td></tr>`);
+  const inp=document.getElementById('rpIn'); inp.focus(); inp.select();
+  document.getElementById('rpf').onsubmit = async e=>{
+    e.preventDefault(); const pwv=inp.value.trim(); const msg=document.getElementById('rpMsg'); const go=document.getElementById('rpGo');
+    if(pwv.length<6){ msg.textContent='6자 이상으로 정하세요.'; return; }
+    go.disabled=true; msg.className='muted'; msg.textContent='바꾸는 중...';
+    const {error} = await sb.functions.invoke('manage-member', {body:{action:'reset', user_id:uid, password:pwv}});
+    if(error){ let t=error.message; try{ const b=await error.context.json(); t=b.message||t; }catch(_){} go.disabled=false; msg.className='err'; msg.textContent=t; return; }
+    await viewTeam(null, true, {title:`${m.display_name}님 비밀번호를 초기화했습니다.`, id:shownId(m.login_id), pw:pwv});
+    window.scrollTo(0,0);
+  };
 }
 
 // ===== 설명서 (관리자 전용) =====
