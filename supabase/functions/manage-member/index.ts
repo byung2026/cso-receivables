@@ -29,8 +29,8 @@ Deno.serve(async (req) => {
     const body = await req.json();
     const action = String(body.action ?? "");
     const password = String(body.password ?? "");
-    if ((action === "create" || action === "reset") && password.length < 8)
-      return json({ error: "PW", message: "임시 비밀번호는 8자 이상으로 정하세요." }, 400);
+    if ((action === "create" || action === "reset") && password.length < 6)
+      return json({ error: "PW", message: "임시 비밀번호는 6자 이상으로 정하세요." }, 400);
 
     const admin = createClient(url, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
 

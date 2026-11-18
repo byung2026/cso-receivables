@@ -1399,8 +1399,8 @@ async function viewTeam(msg, ok, cred){
       <div class="muted">메일 없이 바로 만듭니다. 동료에게 주소·아이디·임시 비밀번호를 알려 주면, 첫 로그인 때 새 비밀번호를 정합니다.</div>
       <label class="f">이름 (회전일 차트에 표시)</label><input class="i" id="mname" required maxlength="20" placeholder="홍길동">
       <label class="f">아이디 (영문 소문자·숫자 3~20자)</label><input class="i" id="mid" required maxlength="20" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="hong01">
-      <label class="f">임시 비밀번호 (8자 이상)</label>
-      <div class="row" style="gap:8px"><input class="i grow" id="mpw" required minlength="8" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" class="btn sec" id="mgen">자동 만들기</button></div>
+      <label class="f">임시 비밀번호 (숫자 6자리 · 자동으로 채워져요)</label>
+      <div class="row" style="gap:8px"><input class="i grow" id="mpw" required minlength="6" inputmode="numeric" value="${tempPw()}" autocomplete="off" autocapitalize="off" spellcheck="false"><button type="button" class="btn sec" id="mgen">자동 만들기</button></div>
       <div style="margin-top:14px"><button class="btn" style="width:100%" id="mbtn">계정 만들기</button></div>
       <div id="mmsg" class="${ok?'ok':'err'}">${msg&&!cred?esc(msg):''}</div>
     </form>
@@ -1424,7 +1424,7 @@ async function viewTeam(msg, ok, cred){
   mgen.onclick = ()=>{ mpw.value = tempPw(); };
   mk.onsubmit = async e=>{
     e.preventDefault(); mbtn.disabled=true; const out=document.getElementById('mmsg'); out.className='muted'; out.textContent='만드는 중...';
-    const pwv = mpw.value;
+    const pwv = mpw.value.trim();
     const {data, error} = await sb.functions.invoke('manage-member', {body:{action:'create', name:mname.value.trim(), login_id:mid.value.trim().toLowerCase(), password:pwv}});
     if(error){ let m=error.message; try{ const b=await error.context.json(); m=b.message||m; }catch(_){} mbtn.disabled=false; out.className='err'; out.textContent=m; return; }
     await viewTeam(null, true, {title:`${data.name}님 계정을 만들었습니다.`, id:data.login_id, pw:pwv});
@@ -1436,9 +1436,10 @@ async function viewTeam(msg, ok, cred){
     await viewTeam(null, true); toast(`${data.name}(${data.email})님에게 초대 메일을 보냈습니다.`);
   };
 }
-// 헷갈리는 글자(0/o, 1/l/i) 뺀 임시 비밀번호 8자: 영문 4 + 숫자 4
-function tempPw(){ const L='abcdefghjkmnpqrstuvwxyz', D='23456789'; const r=n=>{ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]%n; };
-  let s=''; for(let i=0;i<4;i++) s+=L[r(L.length)]; for(let i=0;i<4;i++) s+=D[r(D.length)]; return s; }
+// 임시 비밀번호: 휴대폰 숫자 키패드로 치기 쉬운 숫자 6자리 (같은 숫자 반복·연속 숫자는 다시 뽑음). 첫 로그인 때 새 비밀번호로 바꿈
+function tempPw(){ const r=()=>{ const a=new Uint32Array(1); crypto.getRandomValues(a); return a[0]%10; };
+  for(;;){ let s=''; for(let i=0;i<6;i++) s+=r();
+    if(/^(\d)\1+$/.test(s) || '0123456789'.includes(s) || '9876543210'.includes(s)) continue; return s; } }
 function credText(c){ return `[회전일 차트]\n주소: ${APP_URL}\n아이디: ${c.id}\n임시 비밀번호: ${c.pw}\n처음 로그인하면 새 비밀번호를 정하는 화면이 나옵니다.`; }
 function credBox(c){
   return `<div class="card" style="border:2px solid #9bd3ae;background:#f2fbf5"><h3>✅ ${esc(c.title)}</h3>
