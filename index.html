@@ -1066,16 +1066,25 @@ function markExisting(){
   const hasPrev = pool.length>0; // 이미 거래가 있는 거래처
   const base = r => r.dup?'dup': r.unc?'unc':'';
   const setFlag = (r, f, skip)=>{ if(r.flag!==f){ r.flag=f; r.skip=skip; changed=true; } };
-  S.rows.forEach(r=>{ if(isBlank(r)) return;
+  const sp = S.existItems || new Map(); // 이 거래처에 이미 저장된 품목명 (띄어쓰기만 다른 이름은 기존 표기로 맞춤)
+  const live = S.rows.filter(r=>{ if(isBlank(r)) return false;
+    if(r.item){ const st=sp.get(normName(r.item)); if(st && st!==r.item){ r.item=st; changed=true; } }
     // 기존 거래처에 새 거래장을 올리면 맨 위 '전기이월'은 이미 반영된 잔액 → 기본 '저장 안 함' (처음 등록하는 거래처는 그대로 저장)
-    if(r.kind==='이월' && hasPrev){ setFlag(r,'carry',true); return; }
+    if(r.kind==='이월' && hasPrev){ setFlag(r,'carry',true); return false; }
     if(r.flag==='carry'){ setFlag(r, base(r), !!r.dup); }
-    const k=entryKey(r.date, r.kind, r.amt);
-    const m = (r.lb!=null && pool.find(e=>!e.used && e.k===k && e.lb===r.lb)) || pool.find(e=>!e.used && e.k===k && (r.lb==null || e.lb==null));
-    if(m){ m.used=true; setFlag(r,'exist',true); }
-    else if(r.flag==='exist'){ setFlag(r, base(r), !!r.dup); } });
+    return true; });
+  // 1단계: 날짜·구분·금액·거래장 잔액이 모두 같은 거래끼리 짝
+  // 2단계: 남은 줄은 날짜·구분·금액이 같고 아직 짝이 없는 저장된 거래와 짝 (같은 날 거래 순서가 바뀌어 잔액만 다른 경우)
+  //  → 저장된 1건은 사진 줄 1개와만 짝지으므로, 같은 날 같은 금액을 정말 두 번 주문한 경우 두 번째는 새 거래로 남음
+  const hit = new Map();
+  live.forEach(r=>{ if(r.lb==null) return; const k=entryKey(r.date, r.kind, r.amt);
+    const m=pool.find(e=>!e.used && e.k===k && e.lb===r.lb); if(m){ m.used=true; hit.set(r,true); } });
+  live.forEach(r=>{ if(hit.has(r)) return; const k=entryKey(r.date, r.kind, r.amt);
+    const m=pool.find(e=>!e.used && e.k===k); if(m){ m.used=true; hit.set(r,true); } });
+  live.forEach(r=>{ if(hit.has(r)) setFlag(r,'exist',true); else if(r.flag==='exist') setFlag(r, base(r), !!r.dup); });
   return changed;
 }
+const normName = s => String(s||'').replace(/\s+/g,'').toLowerCase();
 function isCredit(k){ return k==='수금' || k==='반품' || k==='매출할인'; } // 가장 오래된 미수부터 차감
 function rowError(r){
   if(r.skip) return '';
@@ -1146,9 +1155,11 @@ function renderRows(){
   paintStatus(); }
 async function loadStartBal(){
   const name=pc.value.trim(); const ex = findCust(name);
-  S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existList=[];
+  S.startBal=0; S.startCust=ex?ex.customer_id:null; S.existList=[]; S.existItems=new Map();
   if(ex){ const {data}=await sb.from('entries').select('*').eq('customer_id',ex.customer_id);
     S.existList=(data||[]).map(e=>({k:entryKey(e.entry_date, e.kind, isCredit(e.kind)?e.pay_amount:e.sale_amount), lb:e.ledger_balance??null}));
+    // 이 거래처에서 쓰던 품목명 표기 (가장 최근 것 우선)
+    S.existItems=new Map(); [...(data||[])].sort((a,b)=>(a.seq||0)-(b.seq||0)).forEach(e=>{ if(e.item && e.kind!=='수금' && e.kind!=='이월') S.existItems.set(normName(e.item), e.item); });
     const r=runCheck((data||[]).sort(sortEntries)).reverse().find(x=>x._rb!=null); S.startBal=r?r._rb:0; }
   if(markExisting()) renderRows(); // 표시가 바뀐 줄이 있을 때만 다시 그림 (입력 중인 칸 보호)
   const msEl=document.getElementById('mstart'); if(!msEl) return; // 화면을 벗어난 뒤 늦게 끝난 경우
